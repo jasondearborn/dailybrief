@@ -1,0 +1,229 @@
+# RSS/Atom feed configuration
+# Format: each entry has url, category, trust_level, and optional notes
+# trust_level: high | medium | vendor | state_adjacent | research | zeitgeist
+#
+# Removed (no working RSS as of 2026-03-10):
+#   - The Batch (Andrew Ng) — deeplearning.ai RSS gone, no Substack
+#   - TSMC Newsroom — 403 blocks automated access
+#   - Arista Networks Blog — 406 blocks automated access
+#   - Yicai Global — feed URL 404
+#   - Epsilon Theory — redesigned site, RSS removed
+#   - ICE ERO Press Releases — feed pulled (404)
+#   - BayCity News — no public RSS
+#   - CAL FIRE Incident Feed — API endpoint removed (403/redirect loop)
+
+feeds:
+
+  # --- Semiconductors / Networking / AI ---
+  - name: SemiAnalysis
+    url: https://www.semianalysis.com/feed
+    category: semiconductors
+    trust_level: high
+    notes: "Dylan Patel — chip supply chain early signal, single-source medium confidence"
+
+  - name: Fabricated Knowledge
+    url: https://www.fabricatedknowledge.com/feed
+    category: semiconductors
+    trust_level: high
+    notes: "Semiconductor supply chain early signal, single-source medium confidence"
+
+  - name: The Chip Letter
+    url: https://thechipletter.substack.com/feed
+    category: semiconductors
+    trust_level: medium
+
+  - name: Import AI
+    url: https://importai.substack.com/feed
+    category: ai
+    trust_level: medium
+    notes: "Jack Clark — weekly AI research digest"
+
+  - name: Latent Space
+    url: https://www.latent.space/feed
+    category: ai
+    trust_level: medium
+
+  - name: The Register
+    url: https://www.theregister.com/headlines.atom
+    category: networking
+    trust_level: medium
+
+  - name: Ars Technica
+    url: https://feeds.arstechnica.com/arstechnica/index
+    category: tech
+    trust_level: medium
+
+  - name: IEEE Spectrum
+    url: https://spectrum.ieee.org/feeds/feed.rss
+    category: tech
+    trust_level: medium
+    notes: "Engineering-grade technical coverage"
+
+  - name: Wired
+    url: https://www.wired.com/feed/rss
+    category: tech
+    trust_level: medium
+
+  - name: MIT Technology Review
+    url: https://www.technologyreview.com/feed/
+    category: tech
+    trust_level: medium
+
+  - name: Hankyung
+    url: https://www.hankyung.com/feed/all-news
+    category: semiconductors
+    trust_level: medium
+    notes: "Korea Economic Daily — Samsung, SK Hynix, DRAM/HBM early signal"
+
+  # --- Research / Pre-Publication ---
+  - name: arXiv cs.AI
+    url: https://rss.arxiv.org/rss/cs.AI
+    category: research
+    trust_level: research
+    notes: "Pre-peer-review — flag as unreviewed"
+
+  - name: arXiv cs.NI
+    url: https://rss.arxiv.org/rss/cs.NI
+    category: research
+    trust_level: research
+    notes: "Pre-peer-review — flag as unreviewed"
+
+  # --- Vendor Feeds ---
+  - name: Nvidia Blog
+    url: https://blogs.nvidia.com/feed/
+    category: vendor
+    trust_level: vendor
+    notes: "GPU/AI infrastructure — has agenda"
+
+  - name: Juniper Networks Blog
+    url: https://blogs.juniper.net/feed/
+    category: vendor
+    trust_level: vendor
+
+  - name: Cisco Blog
+    url: https://blogs.cisco.com/feed
+    category: vendor
+    trust_level: vendor
+
+  # --- China / Export Control Watch ---
+  - name: South China Morning Post
+    url: https://www.scmp.com/rss/91/feed
+    category: china
+    trust_level: state_adjacent
+    notes: "State-adjacent, read critically. SMIC, Huawei, China tech policy"
+
+  # --- Finance / Retirement ---
+  - name: The Diff
+    url: https://www.thediff.co/feed
+    category: finance
+    trust_level: high
+    notes: "Byrne Hobart — macro/tech second-order thinking"
+
+  - name: Damodaran Online
+    url: http://feeds.feedburner.com/musingsOnMarkets
+    category: finance
+    trust_level: high
+    notes: "Valuation fundamentals, no financial incentive"
+
+  - name: Acquired Podcast
+    url: https://feeds.simplecast.com/l2i9YnTd
+    category: finance
+    trust_level: medium
+    notes: "Deep company analysis"
+
+  - name: SEC EDGAR Latest Filings
+    url: https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=&dateb=&owner=include&count=40&search_text=&output=atom
+    category: finance
+    trust_level: high
+    notes: "Primary source, no media layer"
+
+  - name: SEC Form 4 Insider Transactions
+    url: https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=4&dateb=&owner=include&count=40&search_text=&output=atom
+    category: finance
+    trust_level: high
+    notes: "Insider transactions — alpha signal"
+
+  - name: Federal Reserve News
+    url: https://www.federalreserve.gov/feeds/press_all.xml
+    category: finance
+    trust_level: high
+    notes: "Primary source for macro/rate signals"
+
+  - name: Financial Times
+    url: https://www.ft.com/rss/home
+    category: finance
+    trust_level: medium
+    notes: "International macro context"
+
+  # --- Local Safety ---
+  - name: KQED News
+    url: https://ww2.kqed.org/news/feed/
+    category: local_safety
+    trust_level: medium
+    notes: "Bay Area investigative, civil unrest, policy"
+
+  - name: Mission Local
+    url: https://missionlocal.org/feed/
+    category: local_safety
+    trust_level: medium
+    notes: "SF ground-level civil unrest, immigration enforcement"
+
+  - name: Oaklandside
+    url: https://oaklandside.org/feed/
+    category: local_safety
+    trust_level: medium
+
+  - name: Berkeleyside
+    url: https://www.berkeleyside.org/feed
+    category: local_safety
+    trust_level: medium
+
+  - name: ACLU of Northern CA
+    url: https://www.aclunorcal.org/news/feed
+    category: local_safety
+    trust_level: medium
+    notes: "Civil liberties, ICE/immigration enforcement patterns"
+
+  - name: DHS Newsroom
+    url: https://www.dhs.gov/rss.xml
+    category: local_safety
+    trust_level: high
+    notes: "Federal policy with local impact — primary source"
+
+  # --- Culture / Zeitgeist ---
+  - name: Garbage Day
+    url: https://garbageday.substack.com/feed
+    category: culture
+    trust_level: medium
+    notes: "Internet culture, early trend signal"
+
+  - name: Platformer
+    url: https://www.platformer.news/feed
+    category: culture
+    trust_level: medium
+    notes: "Casey Newton — tech industry culture, Big Tech behavior"
+
+  - name: Bloomberg Businessweek
+    url: https://feeds.bloomberg.com/businessweek/news.rss
+    category: culture
+    trust_level: medium
+    notes: "Business culture, macro consumer trends"
+
+  # --- Reddit (Zeitgeist Only) ---
+  - name: r/SecurityAnalysis
+    url: https://www.reddit.com/r/SecurityAnalysis/.rss
+    category: reddit
+    trust_level: zeitgeist
+    notes: "Zeitgeist signal only — not factual source"
+
+  - name: r/MachineLearning
+    url: https://www.reddit.com/r/MachineLearning/.rss
+    category: reddit
+    trust_level: zeitgeist
+    notes: "Research community signal — not factual source"
+
+  - name: r/networking
+    url: https://www.reddit.com/r/networking/.rss
+    category: reddit
+    trust_level: zeitgeist
+    notes: "Practitioner zeitgeist — not factual source"
