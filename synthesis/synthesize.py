@@ -60,7 +60,7 @@ MIDDAY_CATEGORIES = {"finance", "semiconductors", "ai"}
 
 # Brief type defaults
 BRIEF_DEFAULTS = {
-    "morning": {"hours_back": 24, "max_stories": 100},
+    "morning": {"hours_back": 24, "max_stories": 80},
     "midday":  {"hours_back": 8,  "max_stories": 40},
 }
 
@@ -225,6 +225,28 @@ def fetch_story_groups(
         else:
             log.debug("Dropped story group %d — only Form 4 articles", group["id"])
     groups = filtered
+
+    # Pre-filter zero-signal groups to reduce token usage:
+    # 1. Drop groups where every article is zeitgeist-only (pure Reddit noise)
+    # 2. Drop groups where every article is vendor AND confidence is low
+    #    (no independent confirmation — vendor press release with no pickup)
+    signal_groups: list[dict] = []
+    for group in groups:
+        arts = group["articles"]
+        all_zeitgeist = all(a["is_zeitgeist"] for a in arts)
+        all_vendor_low = (
+            all(a["is_vendor"] for a in arts) and group["confidence"] == "low"
+        )
+        if all_zeitgeist:
+            log.debug("Dropped zero-signal group %d — all zeitgeist", group["id"])
+        elif all_vendor_low:
+            log.debug("Dropped zero-signal group %d — vendor-only, low confidence", group["id"])
+        else:
+            signal_groups.append(group)
+    dropped = len(groups) - len(signal_groups)
+    if dropped:
+        log.info("Pre-filtered %d zero-signal groups (zeitgeist/vendor-only)", dropped)
+    groups = signal_groups
 
     return groups
 
