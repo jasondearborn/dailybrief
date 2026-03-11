@@ -51,6 +51,10 @@ DEFAULT_MODEL = "claude-sonnet-4-6"
 # Keeps token usage reasonable; Claude doesn't need the full 4000-char body
 PROMPT_TEXT_CHARS = 400
 
+# Form 4 source name — suppress until EDGAR enrichment is implemented.
+# Form 4 stubs have no transaction detail (type/shares/price) and are low value.
+FORM4_SOURCE = "SEC Form 4 Insider Transactions"
+
 # Categories included in midday brief
 MIDDAY_CATEGORIES = {"finance", "semiconductors", "ai"}
 
@@ -208,6 +212,19 @@ def fetch_story_groups(
         )
         art_cols = [d[0] for d in art_cur.description]
         group["articles"] = [dict(zip(art_cols, row)) for row in art_cur.fetchall()]
+
+    # Suppress Form 4 stubs — no enrichment yet, bare entries are low value.
+    # Remove Form 4 articles from every group; drop groups that become empty.
+    filtered: list[dict] = []
+    for group in groups:
+        group["articles"] = [
+            a for a in group["articles"] if a["source_name"] != FORM4_SOURCE
+        ]
+        if group["articles"]:
+            filtered.append(group)
+        else:
+            log.debug("Dropped story group %d — only Form 4 articles", group["id"])
+    groups = filtered
 
     return groups
 
