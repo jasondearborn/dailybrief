@@ -97,7 +97,7 @@ Produce a midday brief in the following markdown structure. Do not deviate.
 9. Do not fabricate trade implications. If the article does not support a specific implication, say "No specific trade implication clear from available text."
 10. Omit any section that has no entries.
 11. Background is capped at 5 items maximum. Select the 5 highest-signal items by source credibility and relevance.
-12. arXiv entries (TRUST=research): assign a tier based on relevance and signal strength. Always append "(unreviewed pre-publication)" to the source attribution for arxiv items.
+12. arXiv entries (TRUST=research): assign a tier based on relevance and signal strength. Always append "(unreviewed pre-publication)" to the source attribution for arxiv items. Cap Pre-Publication Research at 2–3 items maximum — select the most relevant to networking, AI infrastructure, or finance; discard the rest silently.
 13. Source link priority hierarchy (one link per story, best available source):
     1. Primary sources: SEC EDGAR filing URL, Fed publications, official government sources
     2. High-credibility independents: SemiAnalysis, Fabricated Knowledge, Epsilon Theory, Verdad

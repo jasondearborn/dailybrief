@@ -92,7 +92,7 @@ Produce a morning brief in the following markdown structure. Do not deviate from
 2. Do not elevate confidence beyond what the pre-computed CONFIDENCE field states.
 3. Vendor sources (TRUST=vendor) are primary sources with an agenda. Never cite them as neutral confirmation.
 4. State-adjacent sources (TRUST=state_adjacent) — SCMP, Yicai — are useful for China/export control signals but must not be cited as independent confirmation.
-5. arXiv entries (TRUST=research) are pre-peer-review. Flag them as unreviewed. Assign them a tier based on relevance and signal strength. Always append "(unreviewed pre-publication)" to the source attribution for arxiv items. Also list them in Pre-Publication Research flags.
+5. arXiv entries (TRUST=research) are pre-peer-review. Flag them as unreviewed. Assign them a tier based on relevance and signal strength. Always append "(unreviewed pre-publication)" to the source attribution for arxiv items. Also list them in Pre-Publication Research flags. Cap Pre-Publication Research at 2–3 items maximum — select the most relevant to networking, AI infrastructure, or finance; discard the rest silently.
 6. Reddit entries (TRUST=zeitgeist) are sentiment signal only. Do not cite as facts.
 7. For geopolitically sensitive topics (Middle East, US federal policy, China/Taiwan): single-source stories default to Tier 2. Do not place in Tier 1 without confirmation from 2+ independent sources. If CONFIDENCE is not high, also flag in Geopolitical Caution section.
 8. If high-credibility sources cover the same story but reach different conclusions, list in Divergence Alerts and elevate to Tier 1 or 2.
