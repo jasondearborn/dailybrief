@@ -6,12 +6,17 @@
 | SemiAnalysis (Dylan Patel) | Substack | Chip industry deep dives, supply chain alpha — established early-signal credibility |
 | Fabricated Knowledge | Substack | Semiconductor supply chain — established early-signal credibility |
 | The Chip Letter | Substack | Accessible chip industry news |
+| The Next Platform | Web/RSS | HPC, AI infrastructure, datacenter — semiconductors/AI infra focus |
 | Import AI (Jack Clark) | Substack | Weekly AI research digest |
 | The Batch (Andrew Ng) | Newsletter | Applied AI |
 | Latent Space | Substack | AI engineering |
 | The Register | Web/RSS | Networking, enterprise tech |
 | Ars Technica | Web/RSS | Tech, chips, AI |
 | IEEE Spectrum | Web/RSS | Engineering-grade technical coverage |
+| Stacey on IoT (Stacey Higginbotham) | Web/RSS | Networking, IoT, infrastructure — high editorial credibility |
+| Packet Pushers Heavy Networking | Podcast/RSS | Technical networking deep dives (sponsored episodes flagged vendor) |
+| Packet Pushers Network Break | Podcast/RSS | Weekly networking news roundup (sponsored episodes flagged vendor) |
+| Light Reading | Web/RSS | Telecom and optical networking industry news |
 | Wired | Web/RSS | Broad tech trends |
 | MIT Tech Review | Web/RSS | Research to market pipeline |
 | Hankyung (Korea Economic Daily) | Web/RSS | Regional primary source — Samsung, SK Hynix, DRAM/HBM early signal |
@@ -42,6 +47,8 @@
 |--------|--------|-------------|
 | Epsilon Theory (Ben Hunt) | Substack | Narrative manipulation analysis, high trust |
 | The Diff (Byrne Hobart) | Substack | Independent, second-order macro/tech thinking |
+| Calculated Risk (Bill McBride) | Blog/RSS | Macro, housing, economic data — strong forecasting track record |
+| Net Interest (Marc Rubinstein) | Substack/RSS | Financial sector deep dives |
 | Verdad Research | Web | Quantitative, free research, no agenda |
 | Damodaran Online | Blog | Valuation fundamentals, no financial incentive |
 | Acquired Podcast | Podcast/RSS | Deep company analysis |

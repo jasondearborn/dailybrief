@@ -68,6 +68,11 @@ _STOPWORDS = {
     "new", "more", "now",
 }
 
+# Sources where sponsor mentions in title/description should flag is_vendor=1
+SPONSOR_FLAGGED_SOURCES = {"Packet Pushers Heavy Networking", "Packet Pushers Network Break"}
+# Keywords indicating a sponsored episode
+_SPONSOR_KEYWORDS = {"sponsor", "sponsored by", "brought to you by", "in partnership with"}
+
 # Trust levels that qualify as "high credibility" single-source
 HIGH_CREDIBILITY = {"high"}
 
@@ -397,6 +402,13 @@ def normalize_batch(
         is_vendor = 1 if trust_level == "vendor" else 0
         is_research = 1 if trust_level == "research" else 0
         is_zeitgeist = 1 if trust_level == "zeitgeist" else 0
+
+        # Packet Pushers (and similar): flag sponsored episodes as vendor
+        if raw["source_name"] in SPONSOR_FLAGGED_SOURCES and not is_vendor:
+            sample = f"{ctitle} {raw.get('summary', '') or ''}".lower()
+            if any(kw in sample for kw in _SPONSOR_KEYWORDS):
+                is_vendor = 1
+                log.debug("Sponsor mention detected in %s: %s", raw["source_name"], ctitle[:60])
 
         if dry_run:
             conf_label = "(new group)" if group_id is None else f"(group {group_id})"

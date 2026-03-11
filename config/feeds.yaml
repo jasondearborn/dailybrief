@@ -227,3 +227,47 @@ feeds:
     category: reddit
     trust_level: zeitgeist
     notes: "Practitioner zeitgeist — not factual source"
+
+  # --- Networking (new sources) ---
+  - name: Packet Pushers Heavy Networking
+    url: https://packetpushers.net/series/heavy-networking/feed/
+    category: networking
+    trust_level: medium
+    notes: "Technical networking deep dives. Episodes with sponsor mentions flagged vendor."
+
+  - name: Packet Pushers Network Break
+    url: https://packetpushers.net/series/network-break-weekly/feed/
+    category: networking
+    trust_level: medium
+    notes: "Weekly networking news roundup. Episodes with sponsor mentions flagged vendor."
+
+  - name: Light Reading
+    url: https://www.lightreading.com/rss.xml
+    category: networking
+    trust_level: medium
+    notes: "Telecom and optical networking industry news"
+
+  - name: The Next Platform
+    url: https://www.nextplatform.com/feed/
+    category: semiconductors
+    trust_level: medium
+    notes: "HPC, AI infrastructure, datacenter — semiconductors/AI infra focus"
+
+  - name: Stacey on IoT
+    url: https://staceyoniot.com/feed/
+    category: networking
+    trust_level: high
+    notes: "Stacey Higginbotham — networking, IoT, infrastructure. High editorial credibility."
+
+  # --- Finance (new sources) ---
+  - name: Calculated Risk
+    url: https://www.calculatedriskblog.com/feeds/posts/default?alt=rss
+    category: finance
+    trust_level: high
+    notes: "Bill McBride — macro, housing, economic data. Strong forecasting track record."
+
+  - name: Net Interest
+    url: https://www.netinterest.co/feed
+    category: finance
+    trust_level: medium
+    notes: "Marc Rubinstein — financial sector deep dives"
