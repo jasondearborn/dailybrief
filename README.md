@@ -1,4 +1,4 @@
-# newsfeed
+# DailyBrief
 
 Personal RSS-to-email news briefing pipeline. Fetches 37 curated feeds, normalizes and deduplicates articles, synthesizes them via Claude, and delivers a formatted brief to email.
 
