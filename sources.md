@@ -73,6 +73,7 @@
 | The Information | Web | Insider tech industry dynamics |
 | Bloomberg Businessweek | RSS | Business culture, macro consumer trends |
 | Puck News | Web | Power dynamics in tech, media, politics |
+| The Rundown AI | Newsletter | Mainstream AI tool/use case awareness — customer conversation fuel |
 
 ## Reddit (Zeitgeist Signal Only — not factual sources)
 | Source | Format | Signal Type |
