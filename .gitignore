@@ -6,6 +6,7 @@ output/
 __pycache__/
 venv/
 *.pyc
+fixit.md
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
