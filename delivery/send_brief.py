@@ -53,9 +53,10 @@ HTML_TEMPLATE = """\
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;700&family=IBM+Plex+Sans:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <style>
   body {{
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     font-size: 15px;
     line-height: 1.6;
     color: #1a1a1a;
@@ -71,26 +72,10 @@ HTML_TEMPLATE = """\
     overflow: hidden;
     box-shadow: 0 1px 4px rgba(0,0,0,0.08);
   }}
-  .header {{
-    background: #0f172a;
-    color: #f8fafc;
-    padding: 20px 28px;
-  }}
-  .header h1 {{
-    margin: 0;
-    font-size: 20px;
-    font-weight: 600;
-    letter-spacing: 0.01em;
-  }}
-  .header .meta {{
-    margin: 4px 0 0;
-    font-size: 12px;
-    color: #94a3b8;
-  }}
   .content {{
     padding: 24px 28px;
   }}
-  h1 {{ display: none; }}  /* title already in header */
+  h1 {{ display: none; }}
   h2 {{
     font-size: 13px;
     font-weight: 700;
@@ -137,23 +122,134 @@ HTML_TEMPLATE = """\
     padding: 12px 28px;
     font-size: 11px;
     color: #94a3b8;
+    font-family: 'IBM Plex Mono', monospace;
   }}
 </style>
 </head>
 <body>
 <div class="wrapper">
-  <div class="header">
-    <h1>{subject}</h1>
-    <div class="meta">Generated {generated_at} UTC &nbsp;·&nbsp; {story_count} stories &nbsp;·&nbsp; {model}</div>
-  </div>
+  {header_html}
   <div class="content">
     {body_html}
   </div>
-  <div class="footer">dailybrief &nbsp;·&nbsp; {generated_at} UTC</div>
+  <div class="footer">dailybrief &nbsp;·&nbsp; {generated_at} UTC &nbsp;·&nbsp; {story_count} stories &nbsp;·&nbsp; {model}</div>
 </div>
 </body>
 </html>
 """
+
+
+def extract_theme(brief_content: str) -> tuple[str, str]:
+    """
+    Extract and remove the THEME: line from the brief.
+    Returns (theme_text, brief_without_theme_line).
+    """
+    import re
+    theme = ""
+    lines = brief_content.splitlines()
+    filtered = []
+    for line in lines:
+        m = re.match(r'^THEME:\s*(.+)', line.strip())
+        if m:
+            theme = m.group(1).strip()
+        else:
+            filtered.append(line)
+    return theme, "\n".join(filtered)
+
+
+def count_tier_items(brief_content: str, brief_type: str) -> dict[str, int]:
+    """
+    Count ### headings within each tier section.
+    Returns dict with keys: act_now, monitor, background, flags.
+    """
+    import re
+
+    if brief_type == "morning":
+        section_map = {
+            "act_now":    r"##\s+Tier\s+1",
+            "monitor":    r"##\s+Tier\s+2",
+            "background": r"##\s+Tier\s+3",
+            "flags":      r"##\s+Flags",
+        }
+    else:  # midday
+        section_map = {
+            "act_now":    r"##\s+Immediate\s+Signals",
+            "monitor":    r"##\s+Watch\s+List",
+            "background": r"##\s+Background",
+            "flags":      r"##\s+Flags",
+        }
+
+    # Split content into sections by ## headings
+    # Build a list of (heading_line_idx, heading_text) pairs
+    lines = brief_content.splitlines()
+    section_starts: list[tuple[int, str]] = []
+    for i, line in enumerate(lines):
+        if re.match(r'^##\s+\S', line):
+            section_starts.append((i, line))
+    section_starts.append((len(lines), ""))  # sentinel
+
+    # Map section key → list of lines in that section
+    section_lines: dict[str, list[str]] = {}
+    for j, (start_idx, heading) in enumerate(section_starts[:-1]):
+        end_idx = section_starts[j + 1][0]
+        content_lines = lines[start_idx:end_idx]
+        for key, pattern in section_map.items():
+            if re.search(pattern, heading, re.IGNORECASE):
+                section_lines[key] = content_lines
+                break
+
+    # Count ### items in each mapped section
+    counts: dict[str, int] = {}
+    for key in ["act_now", "monitor", "background", "flags"]:
+        sec = section_lines.get(key, [])
+        counts[key] = sum(1 for line in sec if re.match(r'^###\s+\S', line))
+
+    return counts
+
+
+def build_graphical_header(
+    brief_type: str,
+    brief_date: str,
+    tier_counts: dict[str, int],
+    theme: str,
+) -> str:
+    """Render the graphical email header HTML (fully inline CSS, Gmail-safe)."""
+    label = "Morning Brief" if brief_type == "morning" else "Midday Brief"
+
+    tiles = [
+        ("ACT NOW",    tier_counts.get("act_now", 0),    "#dc2626"),  # red
+        ("MONITOR",    tier_counts.get("monitor", 0),    "#d97706"),  # amber
+        ("BACKGROUND", tier_counts.get("background", 0), "#475569"),  # slate
+        ("FLAGS",      tier_counts.get("flags", 0),      "#7c3aed"),  # purple
+    ]
+
+    tiles_html = ""
+    for tile_label, count, color in tiles:
+        tiles_html += f"""
+        <td style="width:25%; padding:0 6px; vertical-align:top;">
+          <div style="background:#1e293b; border-top:3px solid {color}; border-radius:4px; padding:10px 12px; text-align:center;">
+            <div style="font-family:'IBM Plex Mono',monospace; font-size:22px; font-weight:700; color:#f8fafc; line-height:1;">{count}</div>
+            <div style="font-family:'IBM Plex Mono',monospace; font-size:9px; font-weight:500; color:#94a3b8; text-transform:uppercase; letter-spacing:0.1em; margin-top:4px;">{tile_label}</div>
+          </div>
+        </td>"""
+
+    theme_html = ""
+    if theme:
+        theme_html = f"""
+  <div style="background:#0f172a; border-top:1px solid #1e3a5f; padding:10px 24px; display:flex; align-items:center; gap:10px;">
+    <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#3b82f6; box-shadow:0 0 6px #3b82f6; flex-shrink:0;"></span>
+    <span style="font-family:'IBM Plex Sans',sans-serif; font-size:13px; color:#93c5fd; font-style:italic;">{theme}</span>
+  </div>"""
+
+    return f"""
+  <div style="background:#0f172a; padding:20px 24px 14px;">
+    <div style="font-family:'IBM Plex Sans',sans-serif; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.12em; color:#475569; margin-bottom:4px;">Daily Brief</div>
+    <div style="font-family:'IBM Plex Mono',monospace; font-size:18px; font-weight:700; color:#f8fafc; letter-spacing:0.02em;">{label} — {brief_date}</div>
+    <table style="width:100%; border-collapse:collapse; margin-top:14px;" cellpadding="0" cellspacing="0">
+      <tr>{tiles_html}
+      </tr>
+    </table>
+  </div>{theme_html}"""
 
 
 def md_to_html(md_text: str) -> str:
@@ -230,9 +326,14 @@ def build_email(
     label = "Morning Brief" if brief_type == "morning" else "Midday Brief"
     subject = f"{label} — {today}"
 
-    html_body = md_to_html(brief_content)
+    # Extract theme line and tier counts for graphical header
+    theme, brief_body = extract_theme(brief_content)
+    tier_counts = count_tier_items(brief_body, brief_type)
+    header_html = build_graphical_header(brief_type, today, tier_counts, theme)
+
+    html_body = md_to_html(brief_body)
     full_html = HTML_TEMPLATE.format(
-        subject=subject,
+        header_html=header_html,
         generated_at=metadata["generated_at"],
         story_count=metadata["story_count"],
         model=metadata["model"],

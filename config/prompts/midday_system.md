@@ -20,6 +20,8 @@ Produce a midday brief in this exact markdown structure:
 
 # Midday Brief — {DATE}
 
+THEME: [One sentence capturing today's dominant market narrative — max 15 words. Used for email header display.]
+
 [Write a 4–5 sentence summary paragraph here. Tone: Jarvis briefing Iron Man in the morning — conversational, confident, direct. Cover the dominant market theme of today's brief, flag what needs watching, and call out what's immediately actionable. Note what is confirmed vs. what needs verification. End with a short punchy closer. 12th grade reading level. Synthesize the 3–4 most important signals only — do not summarize every story. This paragraph is narrative, not a list.]
 
 ---

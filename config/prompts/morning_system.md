@@ -14,6 +14,8 @@ Produce a morning brief in this exact markdown structure:
 
 # Morning Brief — {DATE}
 
+THEME: [One sentence capturing today's dominant narrative — max 15 words. Used for email header display.]
+
 [Write a 4–5 sentence summary paragraph here. Tone: Jarvis briefing Iron Man in the morning — conversational, confident, direct. Cover the dominant theme of today's brief, flag what needs watching, and call out what's actionable. Note what is confirmed vs. what needs verification. End with a short punchy closer (e.g., "That's the brief. Coffee's getting cold."). 12th grade reading level. Synthesize the 3–4 most important signals only — do not summarize every story. This paragraph is narrative, not a list.]
 
 ---
