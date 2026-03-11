@@ -35,32 +35,36 @@ SMTP_TO=...
 
 ## Usage
 
-Run the full pipeline:
+Run the full pipeline via the orchestrator:
+
+```bash
+python main.py --brief-type morning
+python main.py --brief-type midday
+python main.py --brief-type morning --skip-delivery   # synthesize only, no email
+python main.py --brief-type morning --dry-run         # no API calls, no email
+```
+
+Or run individual stages:
 
 ```bash
 python fetchers/rss_fetcher.py
 python parsers/normalize.py
-python synthesis/synthesize.py --brief-type morning
+python synthesis/synthesize.py --brief-type morning [--hours-back 24] [--max-stories 80]
 python delivery/send_brief.py --brief-type morning
 ```
 
-Each script supports `--dry-run` to print output without writing to DB or sending email.
+Each script supports `--dry-run`.
 
-### Individual script options
+## Cron Schedule
 
-```bash
-# Fetch only a specific category
-python fetchers/rss_fetcher.py --category semiconductors
+Runs are scheduled via crontab (`CRON_TZ=America/Los_Angeles`):
 
-# Normalize with a cap
-python parsers/normalize.py --limit 200
-
-# Synthesize with custom lookback window
-python synthesis/synthesize.py --brief-type midday --hours-back 8
-
-# Send a specific brief file
-python delivery/send_brief.py --brief-path output/briefs/2026-03-10_0700_morning.md
 ```
+0 6    * * *   main.py --brief-type morning   # 6:00 AM PT
+30 11  * * *   main.py --brief-type midday    # 11:30 AM PT
+```
+
+Logs: `logs/cron_morning.log`, `logs/cron_midday.log`
 
 ## Feed Configuration
 
@@ -79,9 +83,10 @@ Confidence is assigned during normalization:
 ## Project Structure
 
 ```
+main.py               # Pipeline orchestrator
 config/
   feeds.yaml          # 37 RSS feeds
-  prompts/            # Claude system prompts (morning, midday)
+  prompts/            # Claude system prompts (morning_system.md, midday_system.md)
   .env                # API keys (not committed)
 data/
   newsfeed.db         # SQLite runtime DB (not committed)
@@ -105,6 +110,6 @@ logs/                 # Run logs (not committed)
 
 ## Dependencies
 
-Key packages: `feedparser`, `anthropic`, `beautifulsoup4`, `deep-translator`, `langdetect`, `python-dotenv`, `schedule`, `PyYAML`, `Markdown`.
+Key packages: `feedparser`, `anthropic`, `beautifulsoup4`, `deep-translator`, `langdetect`, `python-dotenv`, `PyYAML`, `Markdown`.
 
 Full pinned list in `requirements.txt`.
