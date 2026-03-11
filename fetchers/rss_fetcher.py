@@ -15,7 +15,7 @@ import logging
 import sqlite3
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import feedparser
@@ -46,6 +46,9 @@ logging.getLogger("feedparser").setLevel(logging.WARNING)
 FETCH_DELAY = 1.0
 # Per-feed request timeout (seconds)
 FETCH_TIMEOUT = 15
+# Articles older than this many days are skipped — prevents old cached entries
+# from re-surfacing in briefs (e.g. SemiAnalysis backlog from Sept 2025)
+ARTICLE_MAX_AGE_DAYS = 7
 
 
 def init_db(conn: sqlite3.Connection) -> None:
@@ -154,6 +157,20 @@ def fetch_feed(feed: dict, dry_run: bool, conn: sqlite3.Connection | None) -> di
         summary = entry.get("summary", "").strip() or None
         content = get_content(entry)
         published = parse_published(entry)
+
+        # Skip articles older than ARTICLE_MAX_AGE_DAYS — prevents stale RSS
+        # cache entries (e.g. SemiAnalysis backlog) from appearing in briefs.
+        if published:
+            try:
+                pub_dt = datetime.fromisoformat(published)
+                if pub_dt.tzinfo is None:
+                    pub_dt = pub_dt.replace(tzinfo=timezone.utc)
+                if datetime.now(timezone.utc) - pub_dt > timedelta(days=ARTICLE_MAX_AGE_DAYS):
+                    log.debug("Skipping stale article (%s): %s", published[:10], title[:60])
+                    continue
+            except ValueError:
+                pass  # unparseable date — let it through
+
         uhash = url_hash(link)
 
         if dry_run:
