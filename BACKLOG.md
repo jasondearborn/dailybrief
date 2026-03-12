@@ -2,17 +2,6 @@
 
 ## Open
 
-### Fix — DB retention policy
-Add a weekly cleanup cron job. Suggested retention:
-- `raw_articles`: 30 days
-- `parsed_articles`: 30 days
-- `story_groups`: 60 days
-- `brief_history`: retain indefinitely
-- `fetch_log`: 30 days
-Log rows deleted to `logs/cleanup.log`.
-
----
-
 ### Fix — README maintenance (standing instruction)
 This is a standing instruction for every Claude Code session. Append to all BACKLOG.md work session prompts: "When all open items are complete, update README.md to reflect current codebase state, commit, and exit."
 
@@ -190,6 +179,7 @@ Ranked by conviction score descending. New additions flagged. Candidates droppin
 - [x] **Fix 12 — Add new sources** — Packet Pushers, Light Reading, The Next Platform, Stacey on IoT, Calculated Risk, Net Interest added to `feeds.yaml` and `sources.md`
 - [x] **Fix 13 — Cap arxiv items in Flags** — Pre-Publication Research capped at 2–3 items in both `morning_system.md` and `midday_system.md` scoring rules
 - [x] **Fix 14 — Optimize token usage** — `PROMPT_TEXT_CHARS = 400` in `synthesize.py`; zero-signal pre-filter (zeitgeist-only + vendor-low groups dropped); per-category slot allocation for morning brief
+- [x] **Fix 19 — DB retention policy** — `maintenance/cleanup_db.py`; 30d raw/parsed/fetch_log, 60d story_groups, brief_history indefinite; VACUUM after run; logs to `logs/cleanup.log`
 - [x] **Fix 18 — Model routing optimization** — `--model` flag in `main.py`; morning→Sonnet, midday→Haiku, dry-run→Haiku; passed through to `synthesize.py`
 - [x] **Fix 17 — Suppress empty sections** — prompts updated to omit subsections instead of "None"; `strip_none_sections()` post-processor in `send_brief.py` as safety net
 - [x] **Fix 16 — Suppress empty/low-signal briefs** — `brief_has_actionable_content()` in `send_brief.py`; no Tier 1/2 → suppression log + one-liner notification email
