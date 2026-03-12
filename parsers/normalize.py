@@ -22,7 +22,7 @@ import re
 import sqlite3
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from bs4 import BeautifulSoup
@@ -83,6 +83,15 @@ VENDOR_LEVELS = {"vendor", "state_adjacent"}
 CONF_HIGH_SOURCE_COUNT = 3     # 3+ independent (non-vendor) sources → high
 CONF_MEDIUM_SOURCE_COUNT = 2   # 2 sources → medium
 
+# Deduplication: Jaccard similarity >= this threshold → same story
+FUZZY_THRESHOLD = 0.40
+
+# Deduplication: don't merge articles published more than this many days apart
+FRESHNESS_DAYS = 7
+
+# Load story groups seen within this window for fuzzy matching
+FUZZY_LOOKBACK_DAYS = 7
+
 
 # --- DB Setup ---
 
@@ -91,9 +100,11 @@ def init_db(conn: sqlite3.Connection) -> None:
         CREATE TABLE IF NOT EXISTS story_groups (
             id               INTEGER PRIMARY KEY AUTOINCREMENT,
             title_hash       TEXT NOT NULL UNIQUE,  -- dedup key: hash of normalized title tokens
+            title_tokens     TEXT,                  -- space-separated sorted tokens for fuzzy matching
             representative_title TEXT,
             first_seen       TEXT NOT NULL,
             last_seen        TEXT NOT NULL,
+            last_published   TEXT,                  -- most recent article published date in this group
             source_count     INTEGER NOT NULL DEFAULT 1,
             confidence       TEXT NOT NULL DEFAULT 'low',  -- low | medium | high
             has_divergence   INTEGER NOT NULL DEFAULT 0,   -- 1 if high-credibility sources disagree
@@ -129,9 +140,17 @@ def init_db(conn: sqlite3.Connection) -> None:
     conn.commit()
 
     # Migrations — add columns introduced after initial schema creation
-    existing = {row[1] for row in conn.execute("PRAGMA table_info(parsed_articles)")}
-    if "language" not in existing:
+    existing_pa = {row[1] for row in conn.execute("PRAGMA table_info(parsed_articles)")}
+    if "language" not in existing_pa:
         conn.execute("ALTER TABLE parsed_articles ADD COLUMN language TEXT")
+        conn.commit()
+
+    existing_sg = {row[1] for row in conn.execute("PRAGMA table_info(story_groups)")}
+    if "title_tokens" not in existing_sg:
+        conn.execute("ALTER TABLE story_groups ADD COLUMN title_tokens TEXT")
+        conn.commit()
+    if "last_published" not in existing_sg:
+        conn.execute("ALTER TABLE story_groups ADD COLUMN last_published TEXT")
         conn.commit()
 
 
@@ -246,6 +265,71 @@ def jaccard(a: frozenset, b: frozenset) -> float:
     return intersection / union if union else 0.0
 
 
+def load_recent_groups(conn: sqlite3.Connection, days: int = FUZZY_LOOKBACK_DAYS) -> list[dict]:
+    """Load story groups seen within the last N days for fuzzy dedup."""
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    rows = conn.execute(
+        "SELECT id, title_hash, title_tokens, last_published FROM story_groups WHERE last_seen >= ?",
+        (cutoff,),
+    ).fetchall()
+    result = []
+    for r in rows:
+        tok_str = r[2] or ""
+        result.append({
+            "id": r[0],
+            "title_hash": r[1],
+            "tokens": frozenset(tok_str.split()) if tok_str else frozenset(),
+            "last_published": r[3],
+        })
+    return result
+
+
+def find_fuzzy_match(
+    tokens: frozenset[str],
+    published: str | None,
+    recent_groups: list[dict],
+) -> dict | None:
+    """
+    Find the best Jaccard-similar group in recent_groups.
+    Returns the matching group dict or None.
+    Enforces:
+    - Jaccard >= FUZZY_THRESHOLD
+    - Published dates within FRESHNESS_DAYS of each other (if both are available)
+    Skips groups with fewer than 3 significant tokens to avoid false matches on short titles.
+    """
+    if len(tokens) < 3:
+        return None  # too short to fuzzy-match reliably
+
+    best_score = 0.0
+    best_group = None
+
+    for group in recent_groups:
+        if not group["tokens"] or len(group["tokens"]) < 3:
+            continue
+        score = jaccard(tokens, group["tokens"])
+        if score < FUZZY_THRESHOLD or score <= best_score:
+            continue
+
+        # Freshness check: don't merge articles published far apart
+        if published and group["last_published"]:
+            try:
+                pub_dt = datetime.fromisoformat(published)
+                grp_dt = datetime.fromisoformat(group["last_published"])
+                if pub_dt.tzinfo is None:
+                    pub_dt = pub_dt.replace(tzinfo=timezone.utc)
+                if grp_dt.tzinfo is None:
+                    grp_dt = grp_dt.replace(tzinfo=timezone.utc)
+                if abs((pub_dt - grp_dt).total_seconds()) > FRESHNESS_DAYS * 86400:
+                    continue
+            except ValueError:
+                pass  # unparseable date — allow merge
+
+        best_score = score
+        best_group = group
+
+    return best_group
+
+
 # --- Confidence Scoring ---
 
 def compute_confidence(rows: list[dict]) -> str:
@@ -302,8 +386,10 @@ def get_or_create_story_group(
     conn: sqlite3.Connection,
     thash: str,
     title: str,
+    tokens: frozenset[str],
     now: str,
     category: str,
+    published: str | None = None,
 ) -> int:
     """Return story_group.id, creating if needed."""
     row = conn.execute(
@@ -311,20 +397,30 @@ def get_or_create_story_group(
     ).fetchone()
     if row:
         return row[0]
+    tokens_str = " ".join(sorted(tokens))
     conn.execute(
         """
-        INSERT INTO story_groups (title_hash, representative_title, first_seen, last_seen, categories, top_category)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO story_groups
+            (title_hash, title_tokens, representative_title, first_seen, last_seen,
+             last_published, categories, top_category)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (thash, title[:512], now, now, category, category),
+        (thash, tokens_str, title[:512], now, now, published, category, category),
     )
     return conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 
 
-def update_story_group(conn: sqlite3.Connection, group_id: int, category: str, now: str) -> None:
-    """Increment source_count, update last_seen and categories."""
+def update_story_group(
+    conn: sqlite3.Connection,
+    group_id: int,
+    category: str,
+    now: str,
+    published: str | None = None,
+) -> None:
+    """Increment source_count, update last_seen, categories, and last_published."""
     row = conn.execute(
-        "SELECT source_count, categories FROM story_groups WHERE id = ?", (group_id,)
+        "SELECT source_count, categories, last_published FROM story_groups WHERE id = ?",
+        (group_id,),
     ).fetchone()
     if not row:
         return
@@ -332,13 +428,28 @@ def update_story_group(conn: sqlite3.Connection, group_id: int, category: str, n
     cats = set((row[1] or "").split(","))
     cats.add(category)
     cats.discard("")
+
+    # Update last_published to the more recent article's published date
+    last_pub = row[2]
+    if published:
+        if not last_pub:
+            last_pub = published
+        else:
+            try:
+                new_dt = datetime.fromisoformat(published)
+                cur_dt = datetime.fromisoformat(last_pub)
+                if new_dt > cur_dt:
+                    last_pub = published
+            except ValueError:
+                pass
+
     conn.execute(
         """
         UPDATE story_groups
-        SET source_count = ?, last_seen = ?, categories = ?
+        SET source_count = ?, last_seen = ?, categories = ?, last_published = ?
         WHERE id = ?
         """,
-        (count, now, ",".join(sorted(cats)), group_id),
+        (count, now, ",".join(sorted(cats)), last_pub, group_id),
     )
 
 
@@ -364,9 +475,16 @@ def normalize_batch(
     now = datetime.now(timezone.utc).isoformat()
     written = 0
     skipped = 0
+    fuzzy_merged = 0
 
-    # Build an in-memory index of title_hash → group_id for this batch
-    # (reduces DB round-trips for articles that cluster together in a single run)
+    # Load recent story groups from DB for fuzzy dedup (avoids DB round-trip per article).
+    # In dry_run mode we can't query story_groups (they may not exist), so skip.
+    recent_groups: list[dict] = []
+    if not dry_run:
+        recent_groups = load_recent_groups(conn)
+
+    # In-batch caches: exact hash → group_id, and extend recent_groups list as we
+    # create new groups so within-batch articles can also fuzzy-match each other.
     hash_to_group: dict[str, int] = {}
 
     for raw in raw_rows:
@@ -384,19 +502,8 @@ def normalize_batch(
             continue
 
         tokens = normalize_title_tokens(ctitle)
-
-        # Find best matching existing group via Jaccard similarity
-        # We check the in-batch index first, then fall back to DB lookup by hash
         thash = title_hash(tokens)
-
-        # Try exact hash match first (same story, exact same normalized tokens)
-        group_id = hash_to_group.get(thash)
-        if group_id is None and not dry_run:
-            group_id_row = conn.execute(
-                "SELECT id FROM story_groups WHERE title_hash = ?", (thash,)
-            ).fetchone()
-            if group_id_row:
-                group_id = group_id_row[0]
+        published = raw.get("published")
 
         trust_level = raw["trust_level"]
         is_vendor = 1 if trust_level == "vendor" else 0
@@ -411,18 +518,58 @@ def normalize_batch(
                 log.debug("Sponsor mention detected in %s: %s", raw["source_name"], ctitle[:60])
 
         if dry_run:
-            conf_label = "(new group)" if group_id is None else f"(group {group_id})"
-            print(
-                f"  [{raw['category']}/{trust_level}] {conf_label} {ctitle[:80]}"
-            )
+            # In dry_run, attempt fuzzy match against an in-memory list built this run
+            matched = find_fuzzy_match(tokens, published, recent_groups)
+            if matched:
+                conf_label = f"(fuzzy→group {matched['id']}, j={jaccard(tokens, matched['tokens']):.2f})"
+            else:
+                conf_label = "(new group)"
+                recent_groups.append({
+                    "id": len(recent_groups) + 1,
+                    "title_hash": thash,
+                    "tokens": tokens,
+                    "last_published": published,
+                })
+            print(f"  [{raw['category']}/{trust_level}] {conf_label} {ctitle[:80]}")
             written += 1
             continue
 
-        # Get or create story group
+        # --- Resolve story group ---
+        group_id = hash_to_group.get(thash)
+
         if group_id is None:
-            group_id = get_or_create_story_group(conn, thash, ctitle, now, raw["category"])
+            # 1. Try exact hash in DB
+            row = conn.execute(
+                "SELECT id FROM story_groups WHERE title_hash = ?", (thash,)
+            ).fetchone()
+            if row:
+                group_id = row[0]
+
+        if group_id is None:
+            # 2. Try fuzzy match against recent groups
+            matched = find_fuzzy_match(tokens, published, recent_groups)
+            if matched:
+                group_id = matched["id"]
+                fuzzy_merged += 1
+                log.debug(
+                    "Fuzzy merge (j=%.2f): '%s' → group %d",
+                    jaccard(tokens, matched["tokens"]), ctitle[:60], group_id,
+                )
+
+        if group_id is None:
+            # 3. Create new group
+            group_id = get_or_create_story_group(
+                conn, thash, ctitle, tokens, now, raw["category"], published
+            )
+            # Add to recent_groups so within-batch articles can fuzzy-match it
+            recent_groups.append({
+                "id": group_id,
+                "title_hash": thash,
+                "tokens": tokens,
+                "last_published": published,
+            })
         else:
-            update_story_group(conn, group_id, raw["category"], now)
+            update_story_group(conn, group_id, raw["category"], now, published)
 
         hash_to_group[thash] = group_id
 
@@ -447,6 +594,8 @@ def normalize_batch(
         conn.commit()
         update_confidence_all(conn)
         conn.commit()
+        if fuzzy_merged:
+            log.info("Fuzzy dedup: %d articles merged into existing groups", fuzzy_merged)
 
     return written, skipped
 
