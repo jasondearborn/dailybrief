@@ -2,16 +2,6 @@
 
 ## Open
 
-### Fix — Model routing optimization
-Currently hardcoded to `claude-sonnet-4-6` for all runs:
-- Morning brief: Sonnet — keep
-- Midday brief: switch to `claude-haiku-4-5-20251001` — shorter window, simpler output, lower cost
-- Dry runs / test runs: always Haiku
-- Add `--model` flag to midday cron entry: `python main.py --brief-type midday --model claude-haiku-4-5-20251001`
-- Test midday output quality against Sonnet baseline before committing
-
----
-
 ### Fix — DB retention policy
 Add a weekly cleanup cron job. Suggested retention:
 - `raw_articles`: 30 days
@@ -200,6 +190,7 @@ Ranked by conviction score descending. New additions flagged. Candidates droppin
 - [x] **Fix 12 — Add new sources** — Packet Pushers, Light Reading, The Next Platform, Stacey on IoT, Calculated Risk, Net Interest added to `feeds.yaml` and `sources.md`
 - [x] **Fix 13 — Cap arxiv items in Flags** — Pre-Publication Research capped at 2–3 items in both `morning_system.md` and `midday_system.md` scoring rules
 - [x] **Fix 14 — Optimize token usage** — `PROMPT_TEXT_CHARS = 400` in `synthesize.py`; zero-signal pre-filter (zeitgeist-only + vendor-low groups dropped); per-category slot allocation for morning brief
+- [x] **Fix 18 — Model routing optimization** — `--model` flag in `main.py`; morning→Sonnet, midday→Haiku, dry-run→Haiku; passed through to `synthesize.py`
 - [x] **Fix 17 — Suppress empty sections** — prompts updated to omit subsections instead of "None"; `strip_none_sections()` post-processor in `send_brief.py` as safety net
 - [x] **Fix 16 — Suppress empty/low-signal briefs** — `brief_has_actionable_content()` in `send_brief.py`; no Tier 1/2 → suppression log + one-liner notification email
 - [x] **Fix 15 — Story group deduplication** — Fuzzy Jaccard matching (threshold 0.40) with 7-day freshness window in `normalize.py`; adds `title_tokens` + `last_published` to `story_groups`; logs fuzzy merge count per run
