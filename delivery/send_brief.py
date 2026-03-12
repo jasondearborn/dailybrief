@@ -252,8 +252,46 @@ def build_graphical_header(
   </div>{theme_html}"""
 
 
+def strip_none_sections(md_text: str) -> str:
+    """
+    Remove Flags subsections whose only content is a bare 'None' line.
+    Handles model output that ignores the 'omit instead of None' instruction.
+    A subsection is considered empty if the only non-blank, non-italic line after
+    the ### heading is exactly 'None' or 'none'.
+    """
+    import re
+    lines = md_text.splitlines()
+    out: list[str] = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        # Detect ### heading inside a Flags section
+        if re.match(r'^###\s+\S', line):
+            # Collect lines until next heading or end
+            block = [line]
+            j = i + 1
+            while j < len(lines) and not re.match(r'^#{1,3}\s+\S', lines[j]):
+                block.append(lines[j])
+                j += 1
+            # Check if non-blank, non-italic content is only "None"
+            content_lines = [
+                l for l in block[1:]
+                if l.strip() and not l.strip().startswith("*")
+            ]
+            if len(content_lines) == 1 and content_lines[0].strip().lower() == "none":
+                i = j  # skip this subsection entirely
+                continue
+            out.extend(block)
+            i = j
+        else:
+            out.append(line)
+            i += 1
+    return "\n".join(out)
+
+
 def md_to_html(md_text: str) -> str:
     """Convert markdown to HTML. Wrap tier sections in styled divs."""
+    md_text = strip_none_sections(md_text)
     md_ext = ["extra", "smarty"]
     html_body = markdown.markdown(md_text, extensions=md_ext)
 

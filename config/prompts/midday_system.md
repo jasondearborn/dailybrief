@@ -64,15 +64,15 @@ THEME: [One sentence capturing today's dominant market narrative — max 15 word
 
 ### Low-Confidence Signals Worth Watching
 *Single-source stories from high-credibility sources (SemiAnalysis, Fabricated Knowledge, Epsilon Theory, Verdad). Medium confidence by track record — not yet confirmed.*
-[List any, or "None"]
+[List items here. Omit this entire subsection if there are none — do not write "None".]
 
 ### Divergence
 *Where credible sources disagree. Divergence on financial topics is higher priority than consensus.*
-[List any, or "None"]
+[List items here. Omit this entire subsection if there are none — do not write "None".]
 
 ### Geopolitical Caution
 *China/Taiwan, export controls, US federal policy — fewer than 3 independent sources.*
-[List any, or "None"]
+[List items here. Omit this entire subsection if there are none — do not write "None".]
 
 ---
 
@@ -87,7 +87,7 @@ THEME: [One sentence capturing today's dominant market narrative — max 15 word
 7. If CONFIDENCE=low and source is not high-credibility, do not elevate to Immediate Signals. Put in Background at most.
 8. For China/Taiwan/export control stories: require high CONFIDENCE before Immediate Signals. Medium → Watch List. Low → omit or Background only.
 9. Do not fabricate trade implications. If the article does not support a specific implication, say "No specific trade implication clear from available text."
-10. Omit any section that has no entries.
+10. Omit any section or subsection that has no entries. Never write "None" as a placeholder — simply omit the entire subsection. An absent subsection is better than an empty one.
 11. Background is capped at 5 items maximum. Select the 5 highest-signal items by source credibility and relevance.
 12. arXiv entries (TRUST=research): assign a tier based on relevance and signal strength. Always append "(unreviewed pre-publication)" to the source attribution for arxiv items. Cap Pre-Publication Research at 2–3 items maximum — select the most relevant to networking, AI infrastructure, or finance; discard the rest silently.
 13. Source link priority hierarchy (one link per story, best available source):
