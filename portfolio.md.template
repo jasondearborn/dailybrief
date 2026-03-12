@@ -1,0 +1,23 @@
+# portfolio.md — hand-edit this file, then copy to portfolio.md
+# portfolio.md is gitignored (contains personal financial data).
+# The system reads this file on each run and upserts to the portfolio DB table.
+#
+# Thesis values:
+#   auto  — system generates thesis from source articles on first run
+#   none  — no thesis — monitor for material events only
+#   <text> — your written thesis
+
+## Index Holdings
+VTI, VYM, VOO
+Alert threshold: systemic macro only
+
+## Holdings
+| Ticker | Thesis | Sector |
+|--------|--------|--------|
+| SITM   | RF timing chips for AI infrastructure, underfollowed per SemiAnalysis | Semiconductors |
+| MU     | HBM demand cycle, Huawei HBM constraint tightens supply for US buyers | Semiconductors |
+
+## Watchlist
+| Ticker | Thesis | Buy Trigger |
+|--------|--------|-------------|
+| ALAB   | PCIe retimers for AI fabric, emerging play | SemiAnalysis coverage or thesis-price pullback |

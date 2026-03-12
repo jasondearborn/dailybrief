@@ -95,6 +95,14 @@ def main() -> None:
         log.error("Fetch stage failed — aborting pipeline")
         sys.exit(1)
 
+    # --- Stage 1b: Portfolio parse (optional — skipped if portfolio.md absent) ---
+    portfolio_path = BASE_DIR / "portfolio.md"
+    if portfolio_path.exists():
+        portfolio_cmd = [PYTHON, BASE_DIR / "parsers" / "portfolio_parser.py"] + dry
+        if not run_stage("portfolio", portfolio_cmd):
+            # Non-fatal — portfolio parse failure should not block the brief
+            log.warning("Portfolio parse failed — continuing without portfolio data")
+
     # --- Stage 2: Normalize ---
     normalize_cmd = [PYTHON, BASE_DIR / "parsers" / "normalize.py"] + dry
     if not run_stage("normalize", normalize_cmd):
@@ -112,6 +120,12 @@ def main() -> None:
         stages_failed.append("synthesize")
         log.error("Synthesize stage failed — aborting pipeline")
         sys.exit(1)
+
+    # --- Stage 3b: Generate candidates.md (morning only) ---
+    if args.brief_type == "morning" and not args.dry_run:
+        candidates_cmd = [PYTHON, BASE_DIR / "parsers" / "candidates_writer.py"]
+        if not run_stage("candidates", candidates_cmd):
+            log.warning("Candidates writer failed — continuing")
 
     # --- Stage 4: Deliver ---
     if args.skip_delivery or args.dry_run:
