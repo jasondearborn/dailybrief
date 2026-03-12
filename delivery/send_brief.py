@@ -316,6 +316,29 @@ def get_brief_metadata(conn: sqlite3.Connection, brief_type: str) -> dict:
     return {"model": "unknown", "story_count": 0, "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")}
 
 
+def brief_has_actionable_content(brief_content: str, brief_type: str) -> bool:
+    """Return True if the brief has at least one Tier 1 or Tier 2 story."""
+    counts = count_tier_items(brief_content, brief_type)
+    return counts.get("act_now", 0) > 0 or counts.get("monitor", 0) > 0
+
+
+def build_suppression_email(brief_type: str) -> tuple[str, str, str]:
+    """Return (subject, plain_text, html_str) for a suppression notification."""
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    label = "Morning Brief" if brief_type == "morning" else "Midday Brief"
+    subject = f"{label} — {today}: No actionable signals. Brief suppressed."
+    plain = subject
+    html_content = f"""\
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"></head>
+<body style="font-family:-apple-system,sans-serif;font-size:14px;color:#374151;padding:24px;">
+  <p style="color:#6b7280;">{subject}</p>
+</body>
+</html>"""
+    return subject, plain, html_content
+
+
 def build_email(
     brief_type: str,
     brief_content: str,
@@ -370,6 +393,15 @@ def send_email(
     log.info("Email sent to %s", to_address)
 
 
+def _write_suppression_log(brief_type: str) -> None:
+    """Append a suppression record to logs/suppressed.log."""
+    log_path = BASE_DIR / "logs" / "suppressed.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    with open(log_path, "a") as f:
+        f.write(f"{ts} UTC  {brief_type}  No Tier 1 or Tier 2 stories — brief suppressed\n")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Send daily brief via email")
     group = parser.add_mutually_exclusive_group(required=True)
@@ -405,7 +437,13 @@ def main() -> None:
         metadata = get_brief_metadata(conn, brief_type)
         conn.close()
 
-    subject, plain_text, html_content = build_email(brief_type, brief_content, metadata)
+    # Check for actionable content — suppress if no Tier 1 or Tier 2 stories
+    if not brief_has_actionable_content(brief_content, brief_type):
+        log.info("Brief has no Tier 1 or Tier 2 stories — suppressing full send")
+        _write_suppression_log(brief_type)
+        subject, plain_text, html_content = build_suppression_email(brief_type)
+    else:
+        subject, plain_text, html_content = build_email(brief_type, brief_content, metadata)
 
     if args.dry_run:
         print(f"Subject: {subject}")
