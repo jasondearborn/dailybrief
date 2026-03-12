@@ -2,11 +2,6 @@
 
 ## Open
 
-### PRIORITY 1 — Fix story group deduplication
-Story grouping is nearly 1:1 with raw articles (2,593 articles → 2,479 groups over 2 days). Title hash matching is too strict and not clustering related articles. This is the highest-leverage fix in the backlog — correcting it will cut token usage 60-70%, reduce Tier 3 noise, and fix stale article re-surfacing simultaneously. Investigate `normalize.py` grouping logic. Replace or augment title hash matching with fuzzy title similarity (e.g. difflib or rapidfuzz) and same-story detection based on shared named entities, ticker mentions, or URL domain. Also add a published-date freshness check — articles older than 7 days should not be re-grouped with fresh articles or re-surfaced in synthesis.
-
----
-
 ### Fix — Suppress empty/low-signal briefs
 If no stories meet Tier 1 or Tier 2 threshold after synthesis, do not send the email. Log the skip to `logs/` and send a single-line notification email instead: "Midday Brief — {DATE}: No actionable signals. Brief suppressed." Sending a full email to report nothing is noise.
 
@@ -215,3 +210,4 @@ Ranked by conviction score descending. New additions flagged. Candidates droppin
 - [x] **Fix 12 — Add new sources** — Packet Pushers, Light Reading, The Next Platform, Stacey on IoT, Calculated Risk, Net Interest added to `feeds.yaml` and `sources.md`
 - [x] **Fix 13 — Cap arxiv items in Flags** — Pre-Publication Research capped at 2–3 items in both `morning_system.md` and `midday_system.md` scoring rules
 - [x] **Fix 14 — Optimize token usage** — `PROMPT_TEXT_CHARS = 400` in `synthesize.py`; zero-signal pre-filter (zeitgeist-only + vendor-low groups dropped); per-category slot allocation for morning brief
+- [x] **Fix 15 — Story group deduplication** — Fuzzy Jaccard matching (threshold 0.40) with 7-day freshness window in `normalize.py`; adds `title_tokens` + `last_published` to `story_groups`; logs fuzzy merge count per run
