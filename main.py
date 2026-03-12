@@ -8,6 +8,12 @@ Usage:
     python main.py --brief-type midday
     python main.py --brief-type morning --skip-delivery   # synthesize only
     python main.py --brief-type morning --dry-run         # no API calls, no email
+    python main.py --brief-type midday  --model claude-sonnet-4-6  # override model
+
+Default models:
+    morning  → claude-sonnet-4-6
+    midday   → claude-haiku-4-5-20251001
+    dry-run  → claude-haiku-4-5-20251001 (any type)
 """
 
 import argparse
@@ -21,6 +27,11 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent
 LOG_PATH = BASE_DIR / "logs" / "main.log"
 PYTHON = BASE_DIR / "venv" / "bin" / "python"
+
+# Model routing defaults
+MODEL_MORNING = "claude-sonnet-4-6"
+MODEL_MIDDAY = "claude-haiku-4-5-20251001"
+MODEL_DRYRUN = "claude-haiku-4-5-20251001"
 
 LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(
@@ -55,10 +66,24 @@ def main() -> None:
     parser.add_argument("--brief-type", required=True, choices=["morning", "midday"])
     parser.add_argument("--skip-delivery", action="store_true", help="Skip email delivery stage")
     parser.add_argument("--dry-run", action="store_true", help="Pass --dry-run to all stages (no writes, no API)")
+    parser.add_argument("--model", default=None, help="Override Claude model for synthesis stage")
     args = parser.parse_args()
 
+    # Resolve model: explicit > brief-type default > dry-run override
+    if args.model:
+        model = args.model
+    elif args.dry_run:
+        model = MODEL_DRYRUN
+    elif args.brief_type == "midday":
+        model = MODEL_MIDDAY
+    else:
+        model = MODEL_MORNING
+
     started_at = datetime.now(timezone.utc).isoformat()
-    log.info("=== Daily Brief pipeline START — type=%s dry_run=%s ===", args.brief_type, args.dry_run)
+    log.info(
+        "=== Daily Brief pipeline START — type=%s dry_run=%s model=%s ===",
+        args.brief_type, args.dry_run, model,
+    )
 
     dry = ["--dry-run"] if args.dry_run else []
     stages_failed = []
@@ -81,6 +106,7 @@ def main() -> None:
     synthesize_cmd = [
         PYTHON, BASE_DIR / "synthesis" / "synthesize.py",
         "--brief-type", args.brief_type,
+        "--model", model,
     ] + dry
     if not run_stage("synthesize", synthesize_cmd):
         stages_failed.append("synthesize")
