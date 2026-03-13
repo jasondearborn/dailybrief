@@ -2,6 +2,9 @@
 
 ## Open
 
+- [x] **Add — Krebs on Security** — `https://krebsonsecurity.com` — Investigative cybersecurity journalism from Brian Krebs. Original reporting on breaches, cybercrime, and vulnerabilities. High signal, no aggregation. Add to `feeds.yaml` (category: cybersecurity, trust: high) and `sources.md` under a new Cybersecurity section.
+- [x] **Add — CISA Advisories** — `https://www.cisa.gov/news-events/cybersecurity-advisories` — Official U.S. government cybersecurity advisories. Authoritative source for active exploits, ICS/SCADA vulnerabilities, and critical infrastructure threats. Add to `feeds.yaml` (category: cybersecurity, trust: high) and `sources.md` under Cybersecurity section.
+
 ---
 
 ## Done

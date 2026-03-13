@@ -93,6 +93,12 @@
 | r/MachineLearning | Reddit RSS | Research community signal |
 | r/networking | Reddit RSS | Practitioner zeitgeist |
 
+## Cybersecurity
+| Source | Format | Signal Type |
+|--------|--------|-------------|
+| Krebs on Security | Web/RSS | Brian Krebs — investigative cybersecurity journalism. Original reporting on breaches, cybercrime, vulnerabilities. High signal, no aggregation. |
+| CISA Advisories | Web/RSS | Official U.S. government cybersecurity advisories. Authoritative for active exploits, ICS/SCADA vulnerabilities, critical infrastructure threats. |
+
 ## Triangulation Notes
 - Flag any story covered by only 1-2 sources as low confidence, UNLESS source has established early-signal track record
 - Track per-source hit rate on early stories that later get broad confirmation — weight accordingly

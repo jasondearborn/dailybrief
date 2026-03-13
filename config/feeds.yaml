@@ -285,3 +285,16 @@ feeds:
     category: semiconductors
     trust_level: medium
     notes: "Data center physical infrastructure — power, cooling, land, construction. Relevant to AI infrastructure scale stories."
+
+  # --- Cybersecurity ---
+  - name: Krebs on Security
+    url: https://krebsonsecurity.com/feed/
+    category: cybersecurity
+    trust_level: high
+    notes: "Brian Krebs — investigative cybersecurity journalism. Original reporting on breaches, cybercrime, vulnerabilities. High signal, no aggregation."
+
+  - name: CISA Advisories
+    url: https://www.cisa.gov/feeds/cybersecurity-advisories.xml
+    category: cybersecurity
+    trust_level: high
+    notes: "Official U.S. government cybersecurity advisories. Authoritative source for active exploits, ICS/SCADA vulnerabilities, critical infrastructure threats."
