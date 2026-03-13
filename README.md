@@ -1,20 +1,21 @@
 # DailyBrief
 
-Personal RSS-to-email news briefing pipeline. Fetches 43 curated feeds, normalizes and deduplicates articles, synthesizes them via Claude, and delivers a formatted HTML email brief. Includes portfolio-aware synthesis for midday briefs.
+Personal RSS-to-email news briefing pipeline. Fetches 43 curated feeds plus SEC EDGAR filings and macro data for portfolio tickers, normalizes and deduplicates articles, synthesizes them via Claude, and delivers a formatted HTML email brief. Includes portfolio-aware synthesis for midday briefs.
 
 ## Pipeline
 
 ```
-rss_fetcher.py → portfolio_parser.py → normalize.py → synthesize.py → send_brief.py
-                 (if portfolio.md exists)              candidates_writer.py (morning only)
+rss_fetcher.py → portfolio_parser.py → edgar_fetcher.py → normalize.py → synthesize.py → send_brief.py
+                 (if portfolio.md exists)                                   candidates_writer.py (morning only)
 ```
 
 1. **fetchers/rss_fetcher.py** — Fetch all feeds from `config/feeds.yaml`, write raw articles to SQLite. Deduplicates by URL hash. Skips articles older than 7 days.
 2. **parsers/portfolio_parser.py** *(optional)* — Parse `portfolio.md` and upsert holdings, watchlist, and index positions into the `portfolio` DB table. Skipped silently if `portfolio.md` is absent.
-3. **parsers/normalize.py** — Strip HTML, detect/translate language, group articles by story using fuzzy Jaccard similarity (threshold 0.40) with a 7-day freshness window. Assigns confidence levels. Flags sponsored Packet Pushers episodes as vendor.
-4. **synthesis/synthesize.py** — Pull story groups from DB, pre-filter zero-signal groups, call Claude API, write brief to `output/briefs/`. Morning uses Sonnet; midday uses Haiku by default.
-5. **parsers/candidates_writer.py** *(morning only)* — Regenerate `candidates.md` from the `candidates` DB table after synthesis.
-6. **delivery/send_brief.py** — Check for actionable content; suppress and notify if no Tier 1/2 stories. Render brief as HTML email with graphical header (tier count tiles + theme callout) and send via SMTP.
+3. **fetchers/edgar_fetcher.py** — For each ticker in the `portfolio` and `candidates` tables, fetch recent 8-K, 10-Q, and 10-K filings from SEC EDGAR. Fetches Form 4 insider transactions and enriches from filing XML (transaction type, shares, price, insider name/title); Form 4s are suppressed if enrichment fails. Also fetches Federal Reserve and BLS macro RSS feeds. Writes to `raw_articles` with category `portfolio_signals` or `macro`.
+4. **parsers/normalize.py** — Strip HTML, detect/translate language, group articles by story using fuzzy Jaccard similarity (threshold 0.40) with a 7-day freshness window. Assigns confidence levels. Flags sponsored Packet Pushers episodes as vendor.
+5. **synthesis/synthesize.py** — Pull story groups from DB, pre-filter zero-signal groups, call Claude API, write brief to `output/briefs/`. Morning uses Sonnet; midday uses Haiku by default.
+6. **parsers/candidates_writer.py** *(morning only)* — Regenerate `candidates.md` from the `candidates` DB table after synthesis.
+7. **delivery/send_brief.py** — Check for actionable content; suppress and notify if no Tier 1/2 stories. Render brief as HTML email with graphical header (tier count tiles + theme callout) and send via SMTP.
 
 ## Setup
 
@@ -52,8 +53,9 @@ Or run individual stages:
 
 ```bash
 python fetchers/rss_fetcher.py
-python parsers/normalize.py
 python parsers/portfolio_parser.py          # requires portfolio.md
+python fetchers/edgar_fetcher.py            # requires portfolio/candidates tables in DB
+python parsers/normalize.py
 python synthesis/synthesize.py --brief-type morning [--hours-back 24] [--max-stories 80] [--model MODEL]
 python delivery/send_brief.py --brief-type morning
 python maintenance/cleanup_db.py --dry-run  # preview DB retention cleanup
@@ -117,7 +119,10 @@ Alert threshold: systemic macro only
 | ALAB   | PCIe retimers for AI fabric | SemiAnalysis coverage |
 ```
 
-When `portfolio.md` is present, the midday brief gains a **Portfolio Signals** section (exception-based — only renders when a trigger event has occurred) and a **Candidate Signals** section (new tickers with conviction ≥ 10).
+When `portfolio.md` is present:
+- EDGAR 8-K, 10-Q, 10-K, and enriched Form 4 filings are fetched automatically for each ticker on every run.
+- Federal Reserve and BLS macro releases are fetched on every run regardless of portfolio state.
+- The midday brief gains a **Portfolio Signals** section (exception-based — only renders when a trigger event has occurred) and a **Candidate Signals** section (new tickers with conviction ≥ 10).
 
 `candidates.md` is auto-generated after each morning brief (gitignored). Ranked by conviction score (macro × fundamentals, max 25). Anti-buzz rules enforced at synthesis time.
 
@@ -149,6 +154,7 @@ data/
   newsfeed.db             # SQLite runtime DB (not committed)
 fetchers/
   rss_fetcher.py          # RSS/Atom fetch + raw_articles write
+  edgar_fetcher.py        # SEC EDGAR filings + macro feeds (Fed/BLS) for portfolio tickers
 parsers/
   normalize.py            # HTML strip, translate, fuzzy dedup, story_groups write
   portfolio_parser.py     # portfolio.md → portfolio DB table

@@ -103,6 +103,11 @@ def main() -> None:
             # Non-fatal — portfolio parse failure should not block the brief
             log.warning("Portfolio parse failed — continuing without portfolio data")
 
+    # --- Stage 1c: EDGAR fetch (optional — non-fatal, runs after portfolio parse) ---
+    edgar_cmd = [PYTHON, BASE_DIR / "fetchers" / "edgar_fetcher.py"] + dry
+    if not run_stage("edgar", edgar_cmd):
+        log.warning("EDGAR fetch failed — continuing without EDGAR data")
+
     # --- Stage 2: Normalize ---
     normalize_cmd = [PYTHON, BASE_DIR / "parsers" / "normalize.py"] + dry
     if not run_stage("normalize", normalize_cmd):

@@ -7,20 +7,6 @@ This is a standing instruction for every Claude Code session. Append to all BACK
 
 ---
 
-### Feature — Portfolio auto-sourcing (SEC EDGAR per-ticker fetching)
-When a ticker appears in `portfolio` or `candidates` tables, automatically pull on each fetch run:
-- SEC EDGAR 8-K (material events, guidance, partnerships, leadership changes)
-- SEC EDGAR 10-Q / 10-K (quarterly and annual financials)
-- SEC EDGAR Form 4 (insider transactions — requires enrichment below)
-- Earnings call transcripts (management forward guidance only)
-- Federal Reserve releases and BLS data (macro inputs for all tickers)
-
-Implement as `fetchers/edgar_fetcher.py`. Called from main.py Stage 1c, after portfolio_parser.
-
-SEC Form 4 enrichment: fetch and parse EDGAR filing XML to extract transaction type (buy/sell/grant), shares, price, insider name and title. Only include in synthesis if enrichment succeeds.
-
----
-
 ## Done
 
 - [x] **Fix 1 — Brief type in subject line** — `--brief-type` passed from cron → main.py → send_brief.py → email subject
@@ -43,3 +29,4 @@ SEC Form 4 enrichment: fetch and parse EDGAR filing XML to extract transaction t
 - [x] **Fix 18 — Model routing optimization** — `--model` flag in `main.py`; morning→Sonnet, midday→Haiku, dry-run→Haiku; passed through to `synthesize.py`
 - [x] **Fix 19 — DB retention policy** — `maintenance/cleanup_db.py`; 30d raw/parsed/fetch_log, 60d story_groups, brief_history indefinite; VACUUM after run; logs to `logs/cleanup.log`
 - [x] **Feature 20 — Portfolio and candidate tracking (core)** — `parsers/portfolio_parser.py` (portfolio.md → DB), `parsers/candidates_writer.py` (DB → candidates.md), `portfolio.md.template`; portfolio/candidates/score_history DB tables; Portfolio Signals + Candidate Signals sections in `midday_system.md`; portfolio.md + candidates.md added to `.gitignore`; pipeline integration in `main.py`
+- [x] **Feature 21 — Portfolio auto-sourcing (SEC EDGAR per-ticker fetching)** — `fetchers/edgar_fetcher.py`; fetches 8-K, 10-Q, 10-K for all tickers in portfolio+candidates tables; Form 4 enriched from XML (transaction type, shares, price, insider name/title) — suppressed if enrichment fails; Federal Reserve + BLS macro RSS feeds; writes to raw_articles (category=portfolio_signals or macro); ticker→CIK via EDGAR company_tickers.json with daily cache; called as Stage 1c in `main.py` after portfolio_parser
