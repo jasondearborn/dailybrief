@@ -32,3 +32,12 @@ This is a standing instruction for every Claude Code session. Append to all BACK
 - [x] **Feature 21 — Portfolio auto-sourcing (SEC EDGAR per-ticker fetching)** — `fetchers/edgar_fetcher.py`; fetches 8-K, 10-Q, 10-K for all tickers in portfolio+candidates tables; Form 4 enriched from XML (transaction type, shares, price, insider name/title) — suppressed if enrichment fails; Federal Reserve + BLS macro RSS feeds; writes to raw_articles (category=portfolio_signals or macro); ticker→CIK via EDGAR company_tickers.json with daily cache; called as Stage 1c in `main.py` after portfolio_parser
 - [x] **Fix — Story deduplication: lower Jaccard threshold + entity matching + URL domain clustering** — `FUZZY_THRESHOLD` lowered 0.40→0.20; entity match path (shared portfolio/candidates ticker or company-name token + Jaccard ≥ 0.15); URL domain cluster path (different domain + shared entity token + published within 24h → merge); `load_entity_tokens()` queries portfolio+candidates tables; `load_recent_groups()` fetches representative domain via parsed_articles join; all in `parsers/normalize.py`
 
+
+---
+
+### Fix — Add Human Infrastructure as a source
+Add to `config/feeds.yaml` and `sources.md`:
+- **Human Infrastructure** — https://human-infrastructure.beehiiv.com/feed
+- Category: semiconductors / AI infrastructure
+- Trust: medium
+- Focus: data center physical infrastructure — power, cooling, land, construction. Relevant to AI infrastructure scale stories.
