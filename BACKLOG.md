@@ -2,8 +2,22 @@
 
 ## Open
 
-- [x] **Add — Krebs on Security** — `https://krebsonsecurity.com` — Investigative cybersecurity journalism from Brian Krebs. Original reporting on breaches, cybercrime, and vulnerabilities. High signal, no aggregation. Add to `feeds.yaml` (category: cybersecurity, trust: high) and `sources.md` under a new Cybersecurity section.
-- [x] **Add — CISA Advisories** — `https://www.cisa.gov/news-events/cybersecurity-advisories` — Official U.S. government cybersecurity advisories. Authoritative source for active exploits, ICS/SCADA vulnerabilities, and critical infrastructure threats. Add to `feeds.yaml` (category: cybersecurity, trust: high) and `sources.md` under Cybersecurity section.
+### Standing instruction — README maintenance
+Append to every Claude Code session prompt: "When all open items are complete, update README.md to reflect current codebase state, commit, and exit."
+
+---
+
+### Optimization — Prompt caching
+Enable Anthropic prompt caching on stable, large system prompt blocks to reduce morning brief token cost by an estimated 30–50%.
+
+Implementation:
+- In `synthesize.py`, add `"cache_control": {"type": "ephemeral"}` to the system prompt message block for both morning and midday synthesis calls
+- Verify prompt length qualifies (≥1024 tokens) — morning system prompt almost certainly does
+- Check current Anthropic SDK docs for exact parameter placement (feature has evolved)
+- Log cache hit/miss metrics if available in API response (`usage.cache_read_input_tokens`)
+- Validate no change in synthesis output quality after enabling
+
+Note: Cache TTL is 5 minutes by default. For cron-based runs this does not help across separate invocations unless extended TTL (1 hour) is available for the model in use. Check docs for current TTL options on Sonnet.
 
 ---
 
@@ -33,4 +47,6 @@
 - [x] **Fix — Story deduplication: lower Jaccard threshold + entity matching + URL domain clustering** — `FUZZY_THRESHOLD` lowered 0.40→0.20; entity match path (shared portfolio/candidates ticker or company-name token + Jaccard ≥ 0.15); URL domain cluster path (different domain + shared entity token + published within 24h → merge); `load_entity_tokens()` queries portfolio+candidates tables; `load_recent_groups()` fetches representative domain via parsed_articles join; all in `parsers/normalize.py`
 - [x] **Fix — EDGAR enrichment: resolve filing documents and extract signal content** — `fetchers/edgar_fetcher.py` now fetches and parses primary documents for all filing types. 8-K: extracts item numbers + 500-char disclosure text, filters to high-signal items (1.01/1.02/1.03/2.01/2.05/2.06/5.02/7.01/8.01), skips low-signal-only filings. 10-Q/10-K: extracts MD&A section (600 chars), trust_level='medium'. Form 4: grants (A) and 10b5-1 sales suppressed; open-market purchases surfaced with insider name/role/shares/price/resulting position. Enrichment failures fall back to stub with trust_level='low' and "(enrichment failed)" title suffix. `EDGAR_USER_AGENT` env var used; 0.15s request delay. BeautifulSoup + dotenv added.
 - [x] **Add — Institutional market commentary sources** — Edward Jones RSS (`/rss.xml`, category=macro, trust=medium) added to `feeds.yaml`. Charles Schwab (WAF blocks, no RSS) and Morgan Stanley (no RSS) added to `sources.md` as manual-review-only. Feed count: 44 → 45. All three documented with institutional bias note.
-- [x] **Fix — Add Human Infrastructure as a source** — `https://human-infrastructure.beehiiv.com/feed` added to `config/feeds.yaml` (category: semiconductors, trust: medium) and `sources.md`. Feed count: 43 → 44.
+- [x] **Add — Human Infrastructure source** — `https://human-infrastructure.beehiiv.com/feed` added to `config/feeds.yaml` (category: semiconductors, trust: medium) and `sources.md`. Feed count: 43 → 44.
+- [x] **Add — Krebs on Security** — `https://krebsonsecurity.com/feed` added to `feeds.yaml` (category: cybersecurity, trust: high) and `sources.md` under new Cybersecurity section.
+- [x] **Add — CISA Advisories** — `https://www.cisa.gov/cybersecurity-advisories/all.xml` added to `feeds.yaml` (category: cybersecurity, trust: high) and `sources.md` under Cybersecurity section.
