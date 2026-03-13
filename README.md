@@ -1,6 +1,6 @@
 # DailyBrief
 
-Personal RSS-to-email news briefing pipeline. Fetches 44 curated feeds plus SEC EDGAR filings and macro data for portfolio tickers, normalizes and deduplicates articles, synthesizes them via Claude, and delivers a formatted HTML email brief. Includes portfolio-aware synthesis for midday briefs.
+Personal RSS-to-email news briefing pipeline. Fetches 45 curated feeds plus SEC EDGAR filings and macro data for portfolio tickers, normalizes and deduplicates articles, synthesizes them via Claude, and delivers a formatted HTML email brief. Includes portfolio-aware synthesis for midday briefs.
 
 ## Pipeline
 
@@ -94,11 +94,11 @@ Logs: `logs/cron_morning.log`, `logs/cron_midday.log`
 
 ## Feed Configuration
 
-44 feeds defined in `config/feeds.yaml`. Categories and trust levels:
+45 feeds defined in `config/feeds.yaml`. Categories and trust levels:
 
 | Field | Values |
 |-------|--------|
-| `category` | semiconductors, networking, ai, tech, finance, local_safety, culture, reddit, research, vendor, china |
+| `category` | semiconductors, networking, ai, tech, finance, macro, local_safety, culture, reddit, research, vendor, china |
 | `trust_level` | `high` \| `medium` \| `vendor` \| `state_adjacent` \| `research` \| `zeitgeist` |
 
 Confidence is assigned during normalization:
@@ -152,7 +152,7 @@ Deletes are logged to `logs/cleanup.log`.
 ```
 main.py                   # Pipeline orchestrator
 config/
-  feeds.yaml              # 43 RSS feeds with trust levels
+  feeds.yaml              # 45 RSS feeds with trust levels
   prompts/
     morning_system.md     # Claude system prompt — morning brief
     midday_system.md      # Claude system prompt — midday brief (+ portfolio/candidates)

@@ -259,6 +259,13 @@ feeds:
     trust_level: high
     notes: "Stacey Higginbotham — networking, IoT, infrastructure. High editorial credibility."
 
+  # --- Macro / Institutional Commentary ---
+  - name: Edward Jones Weekly Market Update
+    url: https://www.edwardjones.com/rss.xml
+    category: macro
+    trust_level: medium
+    notes: "Senior economist wrap — equities, bonds, macro, Fed posture. Site-wide feed; filter for market commentary. Institutional bias — cross-check against Calculated Risk."
+
   # --- Finance (new sources) ---
   - name: Calculated Risk
     url: https://www.calculatedriskblog.com/feeds/posts/default?alt=rss

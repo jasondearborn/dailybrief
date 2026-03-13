@@ -57,6 +57,9 @@
 | SEC Form 4 (insider transactions) | Direct feed | Underused alpha signal |
 | Federal Reserve | RSS | Primary source for macro/rate signals |
 | Financial Times | Web/RSS | International macro context |
+| Edward Jones Weekly Market Update | Web/RSS | Senior economist wrap (equities, bonds, macro, Fed posture). Site-wide RSS at /rss.xml. **Institutional bias — cross-check against Calculated Risk.** |
+| Charles Schwab Market Update | Web (no RSS) | Schwab strategist commentary. No public RSS; WAF blocks scraping. Manual review only. **Institutional bias.** |
+| Morgan Stanley Insights | Web (no RSS) | Named strategists (Mike Wilson, Andrew Sheets, others); includes podcast transcripts. No RSS feed. Manual review only. **Institutional bias.** |
 
 ## Local Safety (Trend-Oriented)
 | Source | Format | Signal Type |
