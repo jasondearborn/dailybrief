@@ -83,6 +83,17 @@ def init_db(conn: sqlite3.Connection) -> None:
             success      INTEGER NOT NULL DEFAULT 1,
             error        TEXT
         );
+
+        CREATE TABLE IF NOT EXISTS source_health (
+            source_name     TEXT PRIMARY KEY,
+            url             TEXT,
+            format          TEXT NOT NULL DEFAULT 'rss',
+            last_fetch_at   TEXT,
+            last_success_at TEXT,
+            last_status     TEXT,
+            article_count   INTEGER,
+            notes           TEXT
+        );
     """)
     conn.commit()
 
@@ -124,6 +135,87 @@ def get_content(entry: feedparser.FeedParserDict) -> str | None:
     return None
 
 
+def upsert_source_health(conn: sqlite3.Connection, feed: dict, stats: dict) -> None:
+    """Update source_health row for this feed based on fetch result."""
+    now = stats["fetched_at"]
+    if not stats["success"]:
+        status = "error"
+        last_success_at = None
+    elif stats["seen"] == 0:
+        status = "empty"
+        last_success_at = None
+    else:
+        status = "ok"
+        last_success_at = now
+
+    # Try update first; insert if no existing row
+    updated = conn.execute(
+        """
+        UPDATE source_health
+        SET url = ?, last_fetch_at = ?, last_status = ?, article_count = ?
+            {success_clause}
+        WHERE source_name = ?
+        """.format(success_clause=", last_success_at = ?" if last_success_at else ""),
+        (
+            *(([feed["url"], now, status, stats["seen"], last_success_at, feed["name"]])
+              if last_success_at else
+              [feed["url"], now, status, stats["seen"], feed["name"]]),
+        ),
+    ).rowcount
+
+    if updated == 0:
+        conn.execute(
+            """
+            INSERT INTO source_health (source_name, url, format, last_fetch_at,
+                                       last_success_at, last_status, article_count)
+            VALUES (?, ?, 'rss', ?, ?, ?, ?)
+            """,
+            (feed["name"], feed["url"], now, last_success_at, status, stats["seen"]),
+        )
+    conn.commit()
+
+
+def update_backlog_for_unhealthy_sources(conn: sqlite3.Connection, run_at: str) -> None:
+    """Append [source-health] open items to BACKLOG.md for any source that failed this run."""
+    backlog_path = BASE_DIR / "BACKLOG.md"
+    if not backlog_path.exists():
+        return
+
+    # Find sources with non-ok status fetched in this run (same minute)
+    run_minute = run_at[:16]  # YYYY-MM-DDTHH:MM
+    cur = conn.execute(
+        "SELECT source_name, url, last_status FROM source_health "
+        "WHERE last_status != 'ok' AND last_fetch_at LIKE ?",
+        (run_minute + "%",),
+    )
+    unhealthy = cur.fetchall()
+    if not unhealthy:
+        return
+
+    content = backlog_path.read_text()
+    done_pos = content.find("\n## Done")
+    if done_pos == -1:
+        done_pos = len(content)
+
+    appended = False
+    for source_name, url, status in unhealthy:
+        tag = f"[source-health] {source_name}"
+        if tag in content:
+            continue  # open item already exists
+        entry = (
+            f"\n### {tag}\n\n"
+            f"Feed fetch returned status `{status}` for source **{source_name}** "
+            f"(`{url}`). Investigate feed URL, paywall, or format change.\n\n---\n"
+        )
+        content = content[:done_pos] + entry + content[done_pos:]
+        done_pos += len(entry)
+        appended = True
+        log.info("Added [source-health] backlog item for %s (status=%s)", source_name, status)
+
+    if appended:
+        backlog_path.write_text(content)
+
+
 def fetch_feed(feed: dict, dry_run: bool, conn: sqlite3.Connection | None) -> dict:
     """Fetch a single feed. Returns stats dict."""
     name = feed["name"]
@@ -138,7 +230,7 @@ def fetch_feed(feed: dict, dry_run: bool, conn: sqlite3.Connection | None) -> di
         parsed = feedparser.parse(url, request_headers={"User-Agent": "dailybrief-aggregator/1.0"}, agent=None)
     except Exception as exc:
         log.error("Exception fetching %s: %s", name, exc)
-        return {"source": name, "seen": 0, "new": 0, "success": False, "error": str(exc)}
+        return {"source": name, "seen": 0, "new": 0, "success": False, "error": str(exc), "fetched_at": fetched_at}
 
     if parsed.bozo and parsed.bozo_exception:
         # bozo means malformed feed — log but continue if we got entries
@@ -209,7 +301,7 @@ def fetch_feed(feed: dict, dry_run: bool, conn: sqlite3.Connection | None) -> di
         conn.commit()
 
     log.info("  %s: %d seen, %d new", name, seen, new_count)
-    return {"source": name, "seen": seen, "new": new_count, "success": True, "error": None}
+    return {"source": name, "seen": seen, "new": new_count, "success": True, "error": None, "fetched_at": fetched_at}
 
 
 def main() -> None:
@@ -234,6 +326,7 @@ def main() -> None:
     total_seen = 0
     total_new = 0
     errors = []
+    run_at = datetime.now(timezone.utc).isoformat()
 
     for i, feed in enumerate(feeds):
         if i > 0:
@@ -253,6 +346,11 @@ def main() -> None:
                     (stats["source"], datetime.now(timezone.utc).isoformat(), stats["error"]),
                 )
                 conn.commit()
+        if conn and not args.dry_run:
+            upsert_source_health(conn, feed, stats)
+
+    if conn and not args.dry_run:
+        update_backlog_for_unhealthy_sources(conn, run_at)
 
     if conn:
         conn.close()

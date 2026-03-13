@@ -95,6 +95,11 @@ def main() -> None:
         log.error("Fetch stage failed — aborting pipeline")
         sys.exit(1)
 
+    # --- Stage 1a: Web scrape (optional — non-fatal, JS-rendered sources) ---
+    scrape_cmd = [PYTHON, BASE_DIR / "fetchers" / "web_scraper.py"] + dry
+    if not run_stage("scrape", scrape_cmd):
+        log.warning("Web scrape stage failed — continuing without scraped data")
+
     # --- Stage 1b: Portfolio parse (optional — skipped if portfolio.md absent) ---
     portfolio_path = BASE_DIR / "portfolio.md"
     if portfolio_path.exists():

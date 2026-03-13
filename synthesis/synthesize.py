@@ -98,10 +98,18 @@ def init_brief_history(conn: sqlite3.Connection) -> None:
             output_path   TEXT,
             prompt_tokens INTEGER,
             output_tokens INTEGER,
+            cache_read_tokens    INTEGER,
+            cache_creation_tokens INTEGER,
             success       INTEGER NOT NULL DEFAULT 1,
             error         TEXT
         );
     """)
+    # Migrate existing DBs that lack cache columns
+    for col in ("cache_read_tokens", "cache_creation_tokens"):
+        try:
+            conn.execute(f"ALTER TABLE brief_history ADD COLUMN {col} INTEGER")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
     conn.commit()
 
 
@@ -399,7 +407,7 @@ def main() -> None:
         response = client.messages.create(
             model=args.model,
             max_tokens=4096,
-            system=system_prompt,
+            system=[{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}],
             messages=[{"role": "user", "content": user_message}],
         )
     except anthropic.APIError as exc:
@@ -419,8 +427,13 @@ def main() -> None:
     brief_content = response.content[0].text
     prompt_tokens = response.usage.input_tokens
     output_tokens = response.usage.output_tokens
+    cache_read_tokens = getattr(response.usage, "cache_read_input_tokens", 0) or 0
+    cache_creation_tokens = getattr(response.usage, "cache_creation_input_tokens", 0) or 0
 
-    log.info("API response: %d prompt tokens, %d output tokens", prompt_tokens, output_tokens)
+    log.info(
+        "API response: %d prompt tokens, %d output tokens | cache: %d read, %d creation",
+        prompt_tokens, output_tokens, cache_read_tokens, cache_creation_tokens,
+    )
 
     out_path = save_brief(args.brief_type, brief_content)
 
@@ -428,13 +441,15 @@ def main() -> None:
         """
         INSERT INTO brief_history
             (brief_type, generated_at, model, story_count, article_count,
-             output_path, prompt_tokens, output_tokens, success)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+             output_path, prompt_tokens, output_tokens,
+             cache_read_tokens, cache_creation_tokens, success)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
         """,
         (
             args.brief_type, generated_at, args.model,
             len(groups), article_count,
             str(out_path), prompt_tokens, output_tokens,
+            cache_read_tokens, cache_creation_tokens,
         ),
     )
     conn.commit()

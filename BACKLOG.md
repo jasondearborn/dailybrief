@@ -17,44 +17,6 @@ Never leave an item in `## Open` if all its implementation steps are complete.
 
 ## Open
 
-### Optimization — Prompt caching
-Enable Anthropic prompt caching on stable, large system prompt blocks to reduce morning brief token cost by an estimated 30–50%.
-
-Implementation:
-- In `synthesize.py`, add `"cache_control": {"type": "ephemeral"}` to the system prompt message block for both morning and midday synthesis calls
-- Verify prompt length qualifies (≥1024 tokens) — morning system prompt almost certainly does
-- Check current Anthropic SDK docs for exact parameter placement (feature has evolved)
-- Log cache hit/miss metrics if available in API response (`usage.cache_read_input_tokens`)
-- Validate no change in synthesis output quality after enabling
-
-Note: Cache TTL is 5 minutes by default. For cron-based runs this does not help across separate invocations unless extended TTL (1 hour) is available for the model in use. Check docs for current TTL options on Sonnet.
-
----
-
-### Feature — Source health tracking
-Add source health tracking as a side effect of the existing fetch pipeline. Do not create a separate audit script.
-
-Implementation:
-- Add `source_health` table to DB schema (create if not exists): `source_name TEXT`, `url TEXT`, `format TEXT` (rss/scrape/api/manual), `last_fetch_at DATETIME`, `last_success_at DATETIME`, `last_status TEXT` (ok/empty/error/paywall), `article_count INTEGER`, `notes TEXT`
-- In `fetchers/rss_fetcher.py`, upsert a row to `source_health` after each feed fetch attempt — status, article count, timestamp. Reuse fetch result already in hand; no additional HTTP calls.
-- After each run, append any source with status not `ok` to `BACKLOG.md` as an open item tagged `[source-health]` — skip if an open item for that source already exists.
-- Update `README.md` to reflect new table and behavior.
-
----
-
-### Feature — General purpose ingest layer
-Extend the fetcher layer beyond RSS to support JS-rendered pages and direct scraping for sources where RSS is unavailable or incomplete. Free content only — no paywall bypass.
-
-Implementation:
-- Add `fetchers/web_scraper.py` using Playwright (async Python, headless Chromium)
-- Writes to `raw_articles` using same schema as `rss_fetcher.py` so downstream pipeline is unaware of fetch method
-- Call from `main.py` alongside `rss_fetcher.py`
-- Initial targets: Morgan Stanley Insights (`morganstanley.com/insights`)
-- Record fetch method as `format=scrape` in `source_health` table
-- Add Playwright to `requirements.txt`
-
-Note: Schwab is WAF-blocked — deprioritized until Morgan Stanley scraper is validated. Paywalled sources (FT, Bloomberg BW, The Information, Puck) are out of scope.
-
 ---
 
 ## Done
@@ -87,3 +49,6 @@ Note: Schwab is WAF-blocked — deprioritized until Morgan Stanley scraper is va
 - [x] **Add — Krebs on Security** — `https://krebsonsecurity.com/feed` added to `feeds.yaml` (category: cybersecurity, trust: high) and `sources.md`
 - [x] **Add — CISA Advisories** — `https://www.cisa.gov/cybersecurity-advisories/all.xml` added to `feeds.yaml` (category: cybersecurity, trust: high) and `sources.md`
 - [x] **Add — Backlog formatting standing instructions** — standing instructions block expanded with rules for item completion format, Done migration, and open item formatting consistency
+- [x] **Optimization — Prompt caching** — `cache_control: ephemeral` on system prompt in `synthesize.py`; `cache_read_tokens`/`cache_creation_tokens` logged and stored in `brief_history`; DB migration via ALTER TABLE
+- [x] **Feature — Source health tracking** — `source_health` table added to DB in `rss_fetcher.py`; upsert after each feed fetch (ok/empty/error); `update_backlog_for_unhealthy_sources` appends `[source-health]` open items for failed sources at end of run
+- [x] **Feature — General purpose ingest layer** — `fetchers/web_scraper.py` added (Playwright async, headless Chromium); initial target Morgan Stanley Insights; writes to `raw_articles`; upserts `source_health` with `format=scrape`; called as Stage 1a in `main.py`; `playwright` added to `requirements.txt`
