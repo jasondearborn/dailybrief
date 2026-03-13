@@ -7,6 +7,7 @@
 | Fabricated Knowledge | Substack | Semiconductor supply chain — established early-signal credibility |
 | The Chip Letter | Substack | Accessible chip industry news |
 | The Next Platform | Web/RSS | HPC, AI infrastructure, datacenter — semiconductors/AI infra focus |
+| Human Infrastructure | Beehiiv/RSS | Data center physical infrastructure — power, cooling, land, construction. AI infrastructure scale signal. |
 | Import AI (Jack Clark) | Substack | Weekly AI research digest |
 | The Batch (Andrew Ng) | Newsletter | Applied AI |
 | Latent Space | Substack | AI engineering |

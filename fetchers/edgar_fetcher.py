@@ -17,12 +17,15 @@ Usage:
     python fetchers/edgar_fetcher.py [--dry-run]
 
 SEC EDGAR public API — no key required; User-Agent header mandatory per EDGAR policy.
+Set EDGAR_USER_AGENT in config/.env (e.g. your email address).
 """
 
 import argparse
 import hashlib
 import json
 import logging
+import os
+import re
 import sqlite3
 import sys
 import time
@@ -32,12 +35,17 @@ from pathlib import Path
 
 import feedparser
 import requests
+from bs4 import BeautifulSoup
+from dotenv import load_dotenv
 
 # --- Paths ---
 BASE_DIR = Path(__file__).resolve().parent.parent
 DB_PATH = BASE_DIR / "data" / "newsfeed.db"
 LOG_PATH = BASE_DIR / "logs" / "edgar_fetcher.log"
 TICKER_CACHE_PATH = BASE_DIR / "data" / "edgar_tickers.json"
+ENV_PATH = BASE_DIR / "config" / ".env"
+
+load_dotenv(ENV_PATH)
 
 # --- Logging ---
 LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -52,10 +60,13 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 # --- Constants ---
-USER_AGENT = "dailybrief-aggregator/1.0 contact@localhost"
+_edgar_ua_env = os.environ.get("EDGAR_USER_AGENT", "")
+USER_AGENT = _edgar_ua_env if _edgar_ua_env else "dailybrief-aggregator/1.0 contact@localhost"
+
 EDGAR_SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik:010d}.json"
 EDGAR_TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
 EDGAR_ARCHIVES_URL = "https://www.sec.gov/Archives/edgar/data/{cik}/{accession_no_dashes}/{filename}"
+EDGAR_INDEX_URL = "https://www.sec.gov/Archives/edgar/data/{cik}/{accession_no_dashes}-index.json"
 
 # Only include filings filed within this many days
 FILING_MAX_AGE_DAYS = 7
@@ -94,6 +105,26 @@ TRANSACTION_CODE_LABELS = {
     "Z": "voting trust deposit/withdrawal",
 }
 
+# 8-K item signal classification
+HIGH_SIGNAL_8K_ITEMS = {"1.01", "1.02", "1.03", "2.01", "2.05", "2.06", "5.02", "7.01", "8.01"}
+# Low-signal items: skip filing if ONLY these are present
+LOW_SIGNAL_8K_ITEMS = {"2.02", "9.01"}
+
+# 8-K item descriptions
+ITEM_DESCRIPTIONS = {
+    "1.01": "Material Definitive Agreement",
+    "1.02": "Termination of Material Agreement",
+    "1.03": "Bankruptcy or Receivership",
+    "2.01": "Acquisition or Disposal of Assets",
+    "2.02": "Results of Operations",
+    "2.05": "Cost Associated with Exit/Disposal",
+    "2.06": "Material Impairment",
+    "5.02": "Executive Departure/Appointment",
+    "7.01": "Regulation FD Disclosure",
+    "8.01": "Other Material Event",
+    "9.01": "Financial Statements and Exhibits",
+}
+
 # Macro RSS feeds — fetched once per run, not per ticker
 MACRO_FEEDS = [
     {
@@ -110,8 +141,8 @@ MACRO_FEEDS = [
     },
 ]
 
-# Polite delay between EDGAR API requests (seconds)
-REQUEST_DELAY = 0.5
+# Polite delay between EDGAR API requests (seconds) — EDGAR limit is 10 req/s
+REQUEST_DELAY = 0.15
 
 
 def url_hash(url: str) -> str:
@@ -185,20 +216,28 @@ def _xml_text(root: ET.Element, path: str) -> str:
     return ""
 
 
+def _xml_footnotes(root: ET.Element) -> str:
+    """Return concatenated text of all footnote elements."""
+    parts = []
+    for fn in root.findall(".//footnote"):
+        if fn.text:
+            parts.append(fn.text.strip())
+    return " ".join(parts).lower()
+
+
 def enrich_form4(cik: int, accession_no: str, primary_doc: str) -> dict | None:
     """
     Fetch and parse a Form 4 XML filing.
-    Returns a dict with enrichment fields, or None if enrichment fails.
+    Returns a dict with enrichment fields, or None if enrichment fails or
+    the transaction should be suppressed (grants, 10b5-1 sales).
 
-    Required fields for inclusion: transaction_code, shares, price_per_share.
-    If any are missing/unparseable, returns None (filing is suppressed).
+    Surfaced: open-market purchases (code P)
+    Suppressed: grants/awards (code A), 10b5-1 sales, failed enrichment
     """
     accession_no_dashes = accession_no.replace("-", "")
     # The primary doc may be an htm/html wrapper; try to find the XML
-    # EDGAR naming convention: the XML is usually named like *4*.xml or the primary doc itself
     xml_filename = primary_doc
     if not xml_filename.lower().endswith(".xml"):
-        # Try the standard EDGAR naming pattern
         xml_filename = accession_no_dashes + ".xml"
 
     url = EDGAR_ARCHIVES_URL.format(
@@ -244,19 +283,21 @@ def enrich_form4(cik: int, accession_no: str, primary_doc: str) -> dict | None:
     else:
         role = "Reporting Owner"
 
-    # Find the first non-derivative transaction (most common for insider trades)
+    # Find the first non-derivative transaction
     tx_code = ""
     shares_str = ""
     price_str = ""
     acq_disp = ""
+    shares_owned_after_str = ""
 
     for tx in root.findall(".//nonDerivativeTransaction"):
         tx_code = _xml_text(tx, ".//transactionCode")
         shares_str = _xml_text(tx, ".//transactionShares/value")
         price_str = _xml_text(tx, ".//transactionPricePerShare/value")
         acq_disp = _xml_text(tx, ".//transactionAcquiredDisposedCode/value")
+        shares_owned_after_str = _xml_text(tx, ".//sharesOwnedFollowingTransaction/value")
         if tx_code:
-            break  # Use first transaction found
+            break
 
     # If no non-derivative, try derivative transactions
     if not tx_code:
@@ -267,6 +308,17 @@ def enrich_form4(cik: int, accession_no: str, primary_doc: str) -> dict | None:
             acq_disp = _xml_text(tx, ".//transactionAcquiredDisposedCode/value")
             if tx_code:
                 break
+
+    # Suppress grants/awards (code A) — these are compensation, not signal
+    if tx_code == "A":
+        log.debug("Form 4 suppressed — grant/award transaction (%s)", accession_no)
+        return None
+
+    # Suppress sales under a 10b5-1 plan — check footnotes for "10b5-1"
+    footnotes = _xml_footnotes(root)
+    if tx_code == "S" and "10b5-1" in footnotes:
+        log.debug("Form 4 suppressed — 10b5-1 sale (%s)", accession_no)
+        return None
 
     # Require all three key fields; suppress if missing
     if not tx_code or not shares_str or not price_str:
@@ -280,6 +332,13 @@ def enrich_form4(cik: int, accession_no: str, primary_doc: str) -> dict | None:
         log.debug("Form 4 non-numeric shares/price (%s) — suppressed", accession_no)
         return None
 
+    shares_owned_after = None
+    if shares_owned_after_str:
+        try:
+            shares_owned_after = float(shares_owned_after_str)
+        except ValueError:
+            pass
+
     tx_label = TRANSACTION_CODE_LABELS.get(tx_code, f"transaction ({tx_code})")
     direction = "acquired" if acq_disp == "A" else "disposed"
 
@@ -291,6 +350,185 @@ def enrich_form4(cik: int, accession_no: str, primary_doc: str) -> dict | None:
         "shares": shares,
         "price_per_share": price,
         "direction": direction,
+        "shares_owned_after": shares_owned_after,
+    }
+
+
+# ---------------------------------------------------------------------------
+# 8-K enrichment
+# ---------------------------------------------------------------------------
+
+def _extract_plain_text(html_content: str) -> str:
+    """Strip HTML tags and return plain text."""
+    try:
+        soup = BeautifulSoup(html_content, "html.parser")
+        return soup.get_text(separator=" ", strip=True)
+    except Exception:
+        # Fallback: strip tags with regex
+        return re.sub(r"<[^>]+>", " ", html_content)
+
+
+def enrich_8k(
+    cik: int, accession_no: str, primary_doc: str
+) -> dict | None:
+    """
+    Fetch and parse an 8-K filing document.
+    Returns enrichment dict or None if should be skipped/failed.
+
+    Enrichment dict keys:
+        items: list of (item_number, item_text_snippet) tuples for high-signal items
+        title_suffix: e.g. "Item 5.02: Executive Departure/Appointment"
+        summary: extracted disclosure text
+        skip: True if only low-signal items present
+        failed: True if fetch/parse failed (caller should write stub with low trust)
+    """
+    accession_no_dashes = accession_no.replace("-", "")
+    url = EDGAR_ARCHIVES_URL.format(
+        cik=cik, accession_no_dashes=accession_no_dashes, filename=primary_doc
+    )
+    time.sleep(REQUEST_DELAY)
+    resp = edgar_get(url)
+
+    if resp is None:
+        log.debug("8-K fetch failed (%s)", accession_no)
+        return {"failed": True}
+
+    try:
+        text = _extract_plain_text(resp.text)
+    except Exception as exc:
+        log.debug("8-K parse error (%s): %s", accession_no, exc)
+        return {"failed": True}
+
+    # Find all "Item X.XX" occurrences and their positions
+    item_pattern = re.compile(r"Item\s+(\d+\.\d+)", re.IGNORECASE)
+    matches = list(item_pattern.finditer(text))
+
+    if not matches:
+        # No items found — could be an amendment or unusual format
+        log.debug("8-K no items found (%s)", accession_no)
+        return {"failed": True}
+
+    found_items: list[tuple[str, str]] = []
+    for i, m in enumerate(matches):
+        item_num = m.group(1)
+        # Extract text snippet after item header until next item or 500 chars
+        start = m.end()
+        end = matches[i + 1].start() if i + 1 < len(matches) else start + 600
+        snippet = text[start:min(start + 500, end)].strip()
+        # Clean up whitespace
+        snippet = re.sub(r"\s+", " ", snippet)[:500]
+        found_items.append((item_num, snippet))
+
+    # Deduplicate — keep first occurrence of each item number
+    seen: set[str] = set()
+    unique_items: list[tuple[str, str]] = []
+    for item_num, snippet in found_items:
+        if item_num not in seen:
+            seen.add(item_num)
+            unique_items.append((item_num, snippet))
+
+    # Check signal level
+    high_signal = [i for i in unique_items if i[0] in HIGH_SIGNAL_8K_ITEMS]
+    all_low = all(i[0] in LOW_SIGNAL_8K_ITEMS for i in unique_items)
+
+    if not high_signal and all_low:
+        log.debug("8-K only low-signal items (%s) — skipping", accession_no)
+        return {"skip": True}
+
+    if not high_signal:
+        # Has items but none are in our high-signal list — write as stub
+        log.debug("8-K no high-signal items (%s) — using stub", accession_no)
+        return {"failed": True}
+
+    # Build title suffix from first high-signal item
+    first_item_num, first_snippet = high_signal[0]
+    item_desc = ITEM_DESCRIPTIONS.get(first_item_num, f"Item {first_item_num}")
+
+    # If multiple high-signal items, note them in title
+    if len(high_signal) > 1:
+        extra = ", ".join(f"Item {n}" for n, _ in high_signal[1:])
+        title_suffix = f"Item {first_item_num}: {item_desc} (+ {extra})"
+    else:
+        title_suffix = f"Item {first_item_num}: {item_desc}"
+
+    # Build summary from high-signal item snippets
+    summary_parts = []
+    for item_num, snippet in high_signal:
+        desc = ITEM_DESCRIPTIONS.get(item_num, f"Item {item_num}")
+        if snippet:
+            summary_parts.append(f"[Item {item_num} — {desc}] {snippet}")
+    summary = " | ".join(summary_parts)[:1000]
+
+    return {
+        "items": high_signal,
+        "title_suffix": title_suffix,
+        "summary": summary,
+        "skip": False,
+        "failed": False,
+    }
+
+
+# ---------------------------------------------------------------------------
+# 10-Q / 10-K enrichment
+# ---------------------------------------------------------------------------
+
+def enrich_10q_10k(
+    cik: int, accession_no: str, primary_doc: str, form_type: str, desc: str
+) -> dict | None:
+    """
+    Fetch and parse a 10-Q or 10-K filing.
+    Returns enrichment dict with MD&A extract, or None on failure.
+
+    Enrichment dict keys:
+        fiscal_period: string extracted from document or description
+        mda_text: first 600 chars of MD&A section
+        failed: True if fetch/parse failed
+    """
+    accession_no_dashes = accession_no.replace("-", "")
+    url = EDGAR_ARCHIVES_URL.format(
+        cik=cik, accession_no_dashes=accession_no_dashes, filename=primary_doc
+    )
+    time.sleep(REQUEST_DELAY)
+    resp = edgar_get(url)
+
+    if resp is None:
+        log.debug("10-Q/10-K fetch failed (%s)", accession_no)
+        return {"failed": True}
+
+    try:
+        text = _extract_plain_text(resp.text)
+    except Exception as exc:
+        log.debug("10-Q/10-K parse error (%s): %s", accession_no, exc)
+        return {"failed": True}
+
+    # Extract fiscal period from desc or document text
+    fiscal_period = ""
+    if desc:
+        # descriptions like "10-Q" or "FORM 10-Q" — look for period info
+        period_match = re.search(
+            r"(quarter|year|period)\s+(ended?|ending)\s+([A-Za-z]+\s+\d+,?\s*\d{4}|\d{4}-\d{2}-\d{2})",
+            text[:3000], re.IGNORECASE
+        )
+        if period_match:
+            fiscal_period = period_match.group(0).strip()
+
+    # Find MD&A section
+    mda_text = ""
+    mda_pattern = re.compile(
+        r"management.{0,10}s\s+discussion\s+and\s+analysis",
+        re.IGNORECASE
+    )
+    mda_match = mda_pattern.search(text)
+    if mda_match:
+        start = mda_match.end()
+        raw = text[start:start + 800].strip()
+        raw = re.sub(r"\s+", " ", raw)
+        mda_text = raw[:600]
+
+    return {
+        "fiscal_period": fiscal_period,
+        "mda_text": mda_text,
+        "failed": False,
     }
 
 
@@ -353,27 +591,33 @@ def fetch_ticker_filings(
             f"https://www.sec.gov/Archives/edgar/data/{cik}/{accession_nodashes}/{primary_doc}"
         )
 
-        form_label = FORM_NAMES.get(form, form)
-        title = f"{ticker} — {form_label} ({date_str})"
-        if desc:
-            title = f"{ticker} — {form_label}: {desc} ({date_str})"
+        source_name = f"SEC EDGAR: {ticker}"
+        source_url = (
+            f"https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany"
+            f"&CIK={cik}&type={form}&dateb=&owner=include&count=1"
+        )
 
+        # --- Form 4: insider transaction enrichment ---
         if form == "4":
-            # Enrich Form 4 before including
             enrichment = enrich_form4(cik, accession_dashes, primary_doc)
             if enrichment is None:
-                log.debug("%s Form 4 (%s) suppressed — enrichment failed", ticker, date_str)
+                log.debug("%s Form 4 (%s) suppressed", ticker, date_str)
                 continue
 
             e = enrichment
+            shares_after_str = ""
+            if e.get("shares_owned_after") is not None:
+                shares_after_str = f" Resulting position: {e['shares_owned_after']:,.0f} shares."
+
             summary = (
-                f"{e['owner_name']} ({e['role']}) made an {e['transaction_label']} "
-                f"({e['direction']}) of {e['shares']:,.0f} shares at "
-                f"${e['price_per_share']:.2f}/share."
+                f"{e['owner_name']} ({e['role']}) {e['transaction_label']} "
+                f"{e['shares']:,.0f} shares at ${e['price_per_share']:.2f}/share "
+                f"(total ${e['shares'] * e['price_per_share']:,.0f})."
+                f"{shares_after_str}"
             )
             title = (
-                f"{ticker} Form 4: {e['owner_name']} {e['transaction_label']} "
-                f"{e['shares']:,.0f} sh @ ${e['price_per_share']:.2f} ({date_str})"
+                f"{ticker} — {e['owner_name']} ({e['role']}): "
+                f"{e['transaction_label']} {e['shares']:,.0f} shares @ ${e['price_per_share']:.2f}"
             )
             content = (
                 f"Ticker: {ticker} | Company: {company_name}\n"
@@ -385,18 +629,56 @@ def fetch_ticker_filings(
                 f"Total value: ${e['shares'] * e['price_per_share']:,.0f}\n"
                 f"Filed: {date_str}"
             )
-        else:
-            summary = f"{company_name} filed a {form_label} with the SEC on {date_str}."
-            content = None
+            trust_level = "high"
 
-        source_name = f"SEC EDGAR: {ticker}"
-        source_url = f"https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK={cik}&type={form}&dateb=&owner=include&count=10"
+        # --- 8-K: material event enrichment ---
+        elif form == "8-K":
+            enrichment = enrich_8k(cik, accession_dashes, primary_doc)
+
+            if enrichment is None or enrichment.get("skip"):
+                log.debug("%s 8-K (%s) skipped — low-signal items only", ticker, date_str)
+                continue
+
+            if enrichment.get("failed"):
+                # Fall back to stub with low trust
+                title = f"{ticker} 8-K — {desc or 'Material Event'} ({date_str}) (enrichment failed)"
+                summary = f"{company_name} filed an 8-K with the SEC on {date_str}."
+                content = None
+                trust_level = "low"
+            else:
+                title = f"{ticker} 8-K — {enrichment['title_suffix']}"
+                summary = enrichment["summary"]
+                content = None
+                trust_level = "high"
+
+        # --- 10-Q / 10-K: financial report enrichment ---
+        elif form in ("10-Q", "10-K"):
+            enrichment = enrich_10q_10k(cik, accession_dashes, primary_doc, form, desc)
+
+            if enrichment is None or enrichment.get("failed"):
+                # Fall back to stub with low trust
+                title = f"{ticker} {form} — {desc or form} ({date_str}) (enrichment failed)"
+                summary = f"{company_name} filed a {form} with the SEC on {date_str}."
+                content = None
+                trust_level = "low"
+            else:
+                e = enrichment
+                period_str = f" — {e['fiscal_period']}" if e["fiscal_period"] else f" ({date_str})"
+                title = f"{ticker} {form}{period_str}"
+                if e["mda_text"]:
+                    summary = f"[MD&A] {e['mda_text']}"
+                else:
+                    summary = f"{company_name} filed a {form} with the SEC on {date_str}."
+                content = None
+                trust_level = "medium"
+
+        else:
+            continue
 
         if dry_run:
-            print(f"  [edgar] {title}")
-            print(f"    {filing_url}")
-            if form == "4":
-                print(f"    {summary}")
+            print(f"  [edgar/{form}] {title}")
+            print(f"    URL: {filing_url}")
+            print(f"    Summary: {(summary or '')[:120]}")
             new_count += 1
             continue
 
@@ -407,9 +689,9 @@ def fetch_ticker_filings(
                 INSERT INTO raw_articles
                     (url_hash, source_name, source_url, category, trust_level,
                      title, url, published, summary, content, fetched_at)
-                VALUES (?, ?, ?, 'portfolio_signals', 'high', ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, 'portfolio_signals', ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (uhash, source_name, source_url, title, filing_url,
+                (uhash, source_name, source_url, trust_level, title, filing_url,
                  filed_dt.isoformat(), summary, content, fetched_at),
             )
             new_count += 1

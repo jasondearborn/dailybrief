@@ -1,6 +1,6 @@
 # DailyBrief
 
-Personal RSS-to-email news briefing pipeline. Fetches 43 curated feeds plus SEC EDGAR filings and macro data for portfolio tickers, normalizes and deduplicates articles, synthesizes them via Claude, and delivers a formatted HTML email brief. Includes portfolio-aware synthesis for midday briefs.
+Personal RSS-to-email news briefing pipeline. Fetches 44 curated feeds plus SEC EDGAR filings and macro data for portfolio tickers, normalizes and deduplicates articles, synthesizes them via Claude, and delivers a formatted HTML email brief. Includes portfolio-aware synthesis for midday briefs.
 
 ## Pipeline
 
@@ -11,7 +11,13 @@ rss_fetcher.py → portfolio_parser.py → edgar_fetcher.py → normalize.py →
 
 1. **fetchers/rss_fetcher.py** — Fetch all feeds from `config/feeds.yaml`, write raw articles to SQLite. Deduplicates by URL hash. Skips articles older than 7 days.
 2. **parsers/portfolio_parser.py** *(optional)* — Parse `portfolio.md` and upsert holdings, watchlist, and index positions into the `portfolio` DB table. Skipped silently if `portfolio.md` is absent.
-3. **fetchers/edgar_fetcher.py** — For each ticker in the `portfolio` and `candidates` tables, fetch recent 8-K, 10-Q, and 10-K filings from SEC EDGAR. Fetches Form 4 insider transactions and enriches from filing XML (transaction type, shares, price, insider name/title); Form 4s are suppressed if enrichment fails. Also fetches Federal Reserve and BLS macro RSS feeds. Writes to `raw_articles` with category `portfolio_signals` or `macro`.
+3. **fetchers/edgar_fetcher.py** — For each ticker in the `portfolio` and `candidates` tables, fetch recent 8-K, 10-Q, 10-K, and Form 4 filings from SEC EDGAR. Each filing type is enriched by fetching and parsing the primary document:
+   - **8-K**: Extracts item numbers (e.g. Item 1.01, 5.02) and first 500 chars of disclosure text. Only high-signal items are surfaced (1.01, 1.02, 1.03, 2.01, 2.05, 2.06, 5.02, 7.01, 8.01); low-signal-only filings (2.02, 9.01) are skipped. Title format: `{TICKER} 8-K — Item X.XX: Description`.
+   - **10-Q / 10-K**: Extracts MD&A section opening paragraph (up to 600 chars). Title format: `{TICKER} {form} — {fiscal period}`. Trust level set to `medium`.
+   - **Form 4**: Enriched from XML (insider name, role, transaction type, shares, price, resulting position). Open-market purchases (code P) are surfaced; grants/awards (code A) and 10b5-1 sales are suppressed. Failed enrichments are suppressed. Title format: `{TICKER} — {Insider} ({Role}): {transaction} {shares} @ ${price}`.
+   - On enrichment failure for any filing: falls back to stub title/summary, trust level set to `low`, `(enrichment failed)` appended to title. Pipeline does not crash.
+   - EDGAR rate limit respected (0.15s between requests). `EDGAR_USER_AGENT` env var used as User-Agent header.
+   - Also fetches Federal Reserve and BLS macro RSS feeds. Writes to `raw_articles` with category `portfolio_signals` or `macro`.
 4. **parsers/normalize.py** — Strip HTML, detect/translate language, group articles by story using three-path deduplication: exact title-token hash, fuzzy Jaccard similarity (threshold 0.20) with a 7-day freshness window, entity-match boost (shared portfolio/candidates ticker or company-name token + Jaccard ≥ 0.15), and URL domain clustering (different domain + shared entity token + published within 24h → merge). Assigns confidence levels. Flags sponsored Packet Pushers episodes as vendor.
 5. **synthesis/synthesize.py** — Pull story groups from DB, pre-filter zero-signal groups, call Claude API, write brief to `output/briefs/`. Morning uses Sonnet; midday uses Haiku by default.
 6. **parsers/candidates_writer.py** *(morning only)* — Regenerate `candidates.md` from the `candidates` DB table after synthesis.
@@ -35,6 +41,7 @@ EMAIL_SMTP_PORT=...
 EMAIL_USER=...
 EMAIL_PASSWORD=...
 EMAIL_TO=...
+EDGAR_USER_AGENT=your@email.com   # Required by SEC EDGAR policy
 ```
 
 ## Usage
@@ -87,7 +94,7 @@ Logs: `logs/cron_morning.log`, `logs/cron_midday.log`
 
 ## Feed Configuration
 
-43 feeds defined in `config/feeds.yaml`. Categories and trust levels:
+44 feeds defined in `config/feeds.yaml`. Categories and trust levels:
 
 | Field | Values |
 |-------|--------|

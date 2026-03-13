@@ -31,13 +31,5 @@ This is a standing instruction for every Claude Code session. Append to all BACK
 - [x] **Feature 20 — Portfolio and candidate tracking (core)** — `parsers/portfolio_parser.py` (portfolio.md → DB), `parsers/candidates_writer.py` (DB → candidates.md), `portfolio.md.template`; portfolio/candidates/score_history DB tables; Portfolio Signals + Candidate Signals sections in `midday_system.md`; portfolio.md + candidates.md added to `.gitignore`; pipeline integration in `main.py`
 - [x] **Feature 21 — Portfolio auto-sourcing (SEC EDGAR per-ticker fetching)** — `fetchers/edgar_fetcher.py`; fetches 8-K, 10-Q, 10-K for all tickers in portfolio+candidates tables; Form 4 enriched from XML (transaction type, shares, price, insider name/title) — suppressed if enrichment fails; Federal Reserve + BLS macro RSS feeds; writes to raw_articles (category=portfolio_signals or macro); ticker→CIK via EDGAR company_tickers.json with daily cache; called as Stage 1c in `main.py` after portfolio_parser
 - [x] **Fix — Story deduplication: lower Jaccard threshold + entity matching + URL domain clustering** — `FUZZY_THRESHOLD` lowered 0.40→0.20; entity match path (shared portfolio/candidates ticker or company-name token + Jaccard ≥ 0.15); URL domain cluster path (different domain + shared entity token + published within 24h → merge); `load_entity_tokens()` queries portfolio+candidates tables; `load_recent_groups()` fetches representative domain via parsed_articles join; all in `parsers/normalize.py`
-
-
----
-
-### Fix — Add Human Infrastructure as a source
-Add to `config/feeds.yaml` and `sources.md`:
-- **Human Infrastructure** — https://human-infrastructure.beehiiv.com/feed
-- Category: semiconductors / AI infrastructure
-- Trust: medium
-- Focus: data center physical infrastructure — power, cooling, land, construction. Relevant to AI infrastructure scale stories.
+- [x] **Fix — EDGAR enrichment: resolve filing documents and extract signal content** — `fetchers/edgar_fetcher.py` now fetches and parses primary documents for all filing types. 8-K: extracts item numbers + 500-char disclosure text, filters to high-signal items (1.01/1.02/1.03/2.01/2.05/2.06/5.02/7.01/8.01), skips low-signal-only filings. 10-Q/10-K: extracts MD&A section (600 chars), trust_level='medium'. Form 4: grants (A) and 10b5-1 sales suppressed; open-market purchases surfaced with insider name/role/shares/price/resulting position. Enrichment failures fall back to stub with trust_level='low' and "(enrichment failed)" title suffix. `EDGAR_USER_AGENT` env var used; 0.15s request delay. BeautifulSoup + dotenv added.
+- [x] **Fix — Add Human Infrastructure as a source** — `https://human-infrastructure.beehiiv.com/feed` added to `config/feeds.yaml` (category: semiconductors, trust: medium) and `sources.md`. Feed count: 43 → 44.

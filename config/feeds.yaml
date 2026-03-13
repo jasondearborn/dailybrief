@@ -271,3 +271,10 @@ feeds:
     category: finance
     trust_level: medium
     notes: "Marc Rubinstein — financial sector deep dives"
+
+  # --- AI Infrastructure (physical) ---
+  - name: Human Infrastructure
+    url: https://human-infrastructure.beehiiv.com/feed
+    category: semiconductors
+    trust_level: medium
+    notes: "Data center physical infrastructure — power, cooling, land, construction. Relevant to AI infrastructure scale stories."
