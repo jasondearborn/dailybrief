@@ -30,3 +30,12 @@ This is a standing instruction for every Claude Code session. Append to all BACK
 - [x] **Fix 19 — DB retention policy** — `maintenance/cleanup_db.py`; 30d raw/parsed/fetch_log, 60d story_groups, brief_history indefinite; VACUUM after run; logs to `logs/cleanup.log`
 - [x] **Feature 20 — Portfolio and candidate tracking (core)** — `parsers/portfolio_parser.py` (portfolio.md → DB), `parsers/candidates_writer.py` (DB → candidates.md), `portfolio.md.template`; portfolio/candidates/score_history DB tables; Portfolio Signals + Candidate Signals sections in `midday_system.md`; portfolio.md + candidates.md added to `.gitignore`; pipeline integration in `main.py`
 - [x] **Feature 21 — Portfolio auto-sourcing (SEC EDGAR per-ticker fetching)** — `fetchers/edgar_fetcher.py`; fetches 8-K, 10-Q, 10-K for all tickers in portfolio+candidates tables; Form 4 enriched from XML (transaction type, shares, price, insider name/title) — suppressed if enrichment fails; Federal Reserve + BLS macro RSS feeds; writes to raw_articles (category=portfolio_signals or macro); ticker→CIK via EDGAR company_tickers.json with daily cache; called as Stage 1c in `main.py` after portfolio_parser
+
+---
+
+### Fix — Story deduplication: lower Jaccard threshold + entity matching + URL domain clustering
+Current Jaccard threshold of 0.40 is too strict. Different sources title the same story differently — token overlap is low even for identical stories. Fix:
+1. Lower `FUZZY_THRESHOLD` from 0.40 to 0.20
+2. Add proper noun / entity match boost in `find_fuzzy_match` — if two titles share any token from a known entity list (company names, tickers, product names from portfolio/candidates tables) AND Jaccard >= 0.15, treat as same story
+3. Add URL domain + publish date proximity clustering as secondary signal — articles from different domains covering the same story within a 24-hour window and sharing 1+ entity token should be merged regardless of Jaccard score
+Test after: rerun normalize.py and check story_groups count vs raw_articles. Target dedup ratio < 5x.
