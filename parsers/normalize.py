@@ -24,6 +24,7 @@ import sys
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup
 from langdetect import detect, LangDetectException
@@ -84,7 +85,13 @@ CONF_HIGH_SOURCE_COUNT = 3     # 3+ independent (non-vendor) sources → high
 CONF_MEDIUM_SOURCE_COUNT = 2   # 2 sources → medium
 
 # Deduplication: Jaccard similarity >= this threshold → same story
-FUZZY_THRESHOLD = 0.40
+FUZZY_THRESHOLD = 0.20
+
+# Entity match: Jaccard >= this AND shared entity token → same story
+ENTITY_JACCARD_MIN = 0.15
+
+# URL domain clustering: within this window (hours) + shared entity token → same story
+URL_DOMAIN_WINDOW_HOURS = 24
 
 # Deduplication: don't merge articles published more than this many days apart
 FRESHNESS_DAYS = 7
@@ -265,11 +272,45 @@ def jaccard(a: frozenset, b: frozenset) -> float:
     return intersection / union if union else 0.0
 
 
+def extract_domain(url: str | None) -> str | None:
+    """Return the netloc of a URL, or None."""
+    if not url:
+        return None
+    try:
+        return urlparse(url).netloc.lower() or None
+    except Exception:
+        return None
+
+
+def load_entity_tokens(conn: sqlite3.Connection) -> frozenset[str]:
+    """Load known entity tokens (tickers, company name words) from portfolio/candidates tables."""
+    entities: set[str] = set()
+    tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    if "portfolio" in tables:
+        for (ticker,) in conn.execute("SELECT ticker FROM portfolio"):
+            if ticker:
+                entities.add(ticker.lower())
+    if "candidates" in tables:
+        for (ticker, company_name) in conn.execute("SELECT ticker, company_name FROM candidates"):
+            if ticker:
+                entities.add(ticker.lower())
+            if company_name:
+                for tok in normalize_title_tokens(company_name):
+                    entities.add(tok)
+    return frozenset(entities)
+
+
 def load_recent_groups(conn: sqlite3.Connection, days: int = FUZZY_LOOKBACK_DAYS) -> list[dict]:
     """Load story groups seen within the last N days for fuzzy dedup."""
     cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
     rows = conn.execute(
-        "SELECT id, title_hash, title_tokens, last_published FROM story_groups WHERE last_seen >= ?",
+        """
+        SELECT sg.id, sg.title_hash, sg.title_tokens, sg.last_published,
+               (SELECT pa.url FROM parsed_articles pa
+                WHERE pa.story_group_id = sg.id LIMIT 1) AS rep_url
+        FROM story_groups sg
+        WHERE sg.last_seen >= ?
+        """,
         (cutoff,),
     ).fetchall()
     result = []
@@ -280,6 +321,7 @@ def load_recent_groups(conn: sqlite3.Connection, days: int = FUZZY_LOOKBACK_DAYS
             "title_hash": r[1],
             "tokens": frozenset(tok_str.split()) if tok_str else frozenset(),
             "last_published": r[3],
+            "domain": extract_domain(r[4]),
         })
     return result
 
@@ -288,17 +330,25 @@ def find_fuzzy_match(
     tokens: frozenset[str],
     published: str | None,
     recent_groups: list[dict],
+    url: str | None = None,
+    entity_tokens: frozenset[str] | None = None,
 ) -> dict | None:
     """
-    Find the best Jaccard-similar group in recent_groups.
-    Returns the matching group dict or None.
-    Enforces:
-    - Jaccard >= FUZZY_THRESHOLD
-    - Published dates within FRESHNESS_DAYS of each other (if both are available)
-    Skips groups with fewer than 3 significant tokens to avoid false matches on short titles.
+    Find the best matching group in recent_groups. Three match paths:
+
+    1. Jaccard >= FUZZY_THRESHOLD (lowered to 0.20) — standard fuzzy match
+    2. Entity match: shared entity token AND Jaccard >= ENTITY_JACCARD_MIN (0.15)
+    3. Domain cluster: different URL domain + shared entity token + published within
+       URL_DOMAIN_WINDOW_HOURS (24h) — merges cross-domain coverage of same story
+
+    Enforces FRESHNESS_DAYS (7d) for paths 1 and 2.
+    Skips groups with fewer than 3 significant tokens.
     """
     if len(tokens) < 3:
         return None  # too short to fuzzy-match reliably
+
+    incoming_domain = extract_domain(url)
+    shared_entities = entity_tokens or frozenset()
 
     best_score = 0.0
     best_group = None
@@ -306,12 +356,40 @@ def find_fuzzy_match(
     for group in recent_groups:
         if not group["tokens"] or len(group["tokens"]) < 3:
             continue
+
         score = jaccard(tokens, group["tokens"])
-        if score < FUZZY_THRESHOLD or score <= best_score:
+        group_entities = group["tokens"] & shared_entities  # entity tokens in group title
+        has_shared_entity = bool(shared_entities & group["tokens"])
+
+        # --- Path 1: standard Jaccard threshold ---
+        path1 = score >= FUZZY_THRESHOLD
+
+        # --- Path 2: entity match boost ---
+        path2 = has_shared_entity and score >= ENTITY_JACCARD_MIN
+
+        # --- Path 3: URL domain + date proximity + entity token ---
+        path3 = False
+        if has_shared_entity and incoming_domain and group.get("domain"):
+            if incoming_domain != group["domain"]:
+                if published and group["last_published"]:
+                    try:
+                        pub_dt = datetime.fromisoformat(published)
+                        grp_dt = datetime.fromisoformat(group["last_published"])
+                        if pub_dt.tzinfo is None:
+                            pub_dt = pub_dt.replace(tzinfo=timezone.utc)
+                        if grp_dt.tzinfo is None:
+                            grp_dt = grp_dt.replace(tzinfo=timezone.utc)
+                        gap_h = abs((pub_dt - grp_dt).total_seconds()) / 3600
+                        if gap_h <= URL_DOMAIN_WINDOW_HOURS:
+                            path3 = True
+                    except ValueError:
+                        pass
+
+        if not (path1 or path2 or path3):
             continue
 
-        # Freshness check: don't merge articles published far apart
-        if published and group["last_published"]:
+        # Freshness check for paths 1 and 2 (path3 already enforces a tighter window)
+        if not path3 and published and group["last_published"]:
             try:
                 pub_dt = datetime.fromisoformat(published)
                 grp_dt = datetime.fromisoformat(group["last_published"])
@@ -324,7 +402,12 @@ def find_fuzzy_match(
             except ValueError:
                 pass  # unparseable date — allow merge
 
-        best_score = score
+        # Pick best by score (use 1.0 sentinel for path3 to prefer Jaccard ordering otherwise)
+        effective_score = score if (path1 or path2) else ENTITY_JACCARD_MIN
+        if effective_score <= best_score:
+            continue
+
+        best_score = effective_score
         best_group = group
 
     return best_group
@@ -480,8 +563,10 @@ def normalize_batch(
     # Load recent story groups from DB for fuzzy dedup (avoids DB round-trip per article).
     # In dry_run mode we can't query story_groups (they may not exist), so skip.
     recent_groups: list[dict] = []
+    entity_tokens: frozenset[str] = frozenset()
     if not dry_run:
         recent_groups = load_recent_groups(conn)
+        entity_tokens = load_entity_tokens(conn)
 
     # In-batch caches: exact hash → group_id, and extend recent_groups list as we
     # create new groups so within-batch articles can also fuzzy-match each other.
@@ -517,9 +602,12 @@ def normalize_batch(
                 is_vendor = 1
                 log.debug("Sponsor mention detected in %s: %s", raw["source_name"], ctitle[:60])
 
+        article_url = raw.get("url")
+        title_entity_tokens = tokens & entity_tokens
+
         if dry_run:
             # In dry_run, attempt fuzzy match against an in-memory list built this run
-            matched = find_fuzzy_match(tokens, published, recent_groups)
+            matched = find_fuzzy_match(tokens, published, recent_groups, url=article_url, entity_tokens=title_entity_tokens)
             if matched:
                 conf_label = f"(fuzzy→group {matched['id']}, j={jaccard(tokens, matched['tokens']):.2f})"
             else:
@@ -529,6 +617,7 @@ def normalize_batch(
                     "title_hash": thash,
                     "tokens": tokens,
                     "last_published": published,
+                    "domain": extract_domain(article_url),
                 })
             print(f"  [{raw['category']}/{trust_level}] {conf_label} {ctitle[:80]}")
             written += 1
@@ -547,7 +636,7 @@ def normalize_batch(
 
         if group_id is None:
             # 2. Try fuzzy match against recent groups
-            matched = find_fuzzy_match(tokens, published, recent_groups)
+            matched = find_fuzzy_match(tokens, published, recent_groups, url=article_url, entity_tokens=title_entity_tokens)
             if matched:
                 group_id = matched["id"]
                 fuzzy_merged += 1
@@ -567,6 +656,7 @@ def normalize_batch(
                 "title_hash": thash,
                 "tokens": tokens,
                 "last_published": published,
+                "domain": extract_domain(article_url),
             })
         else:
             update_story_group(conn, group_id, raw["category"], now, published)

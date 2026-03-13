@@ -12,7 +12,7 @@ rss_fetcher.py → portfolio_parser.py → edgar_fetcher.py → normalize.py →
 1. **fetchers/rss_fetcher.py** — Fetch all feeds from `config/feeds.yaml`, write raw articles to SQLite. Deduplicates by URL hash. Skips articles older than 7 days.
 2. **parsers/portfolio_parser.py** *(optional)* — Parse `portfolio.md` and upsert holdings, watchlist, and index positions into the `portfolio` DB table. Skipped silently if `portfolio.md` is absent.
 3. **fetchers/edgar_fetcher.py** — For each ticker in the `portfolio` and `candidates` tables, fetch recent 8-K, 10-Q, and 10-K filings from SEC EDGAR. Fetches Form 4 insider transactions and enriches from filing XML (transaction type, shares, price, insider name/title); Form 4s are suppressed if enrichment fails. Also fetches Federal Reserve and BLS macro RSS feeds. Writes to `raw_articles` with category `portfolio_signals` or `macro`.
-4. **parsers/normalize.py** — Strip HTML, detect/translate language, group articles by story using fuzzy Jaccard similarity (threshold 0.40) with a 7-day freshness window. Assigns confidence levels. Flags sponsored Packet Pushers episodes as vendor.
+4. **parsers/normalize.py** — Strip HTML, detect/translate language, group articles by story using three-path deduplication: exact title-token hash, fuzzy Jaccard similarity (threshold 0.20) with a 7-day freshness window, entity-match boost (shared portfolio/candidates ticker or company-name token + Jaccard ≥ 0.15), and URL domain clustering (different domain + shared entity token + published within 24h → merge). Assigns confidence levels. Flags sponsored Packet Pushers episodes as vendor.
 5. **synthesis/synthesize.py** — Pull story groups from DB, pre-filter zero-signal groups, call Claude API, write brief to `output/briefs/`. Morning uses Sonnet; midday uses Haiku by default.
 6. **parsers/candidates_writer.py** *(morning only)* — Regenerate `candidates.md` from the `candidates` DB table after synthesis.
 7. **delivery/send_brief.py** — Check for actionable content; suppress and notify if no Tier 1/2 stories. Render brief as HTML email with graphical header (tier count tiles + theme callout) and send via SMTP.
@@ -192,9 +192,10 @@ Before synthesis, zero-signal story groups are dropped to reduce token usage:
 - All-zeitgeist groups (pure Reddit noise)
 - Vendor-only groups with low confidence (no independent pickup)
 
-Story deduplication uses two-pass matching:
+Story deduplication uses three-path matching:
 1. Exact title-token hash (fast path)
-2. Fuzzy Jaccard similarity ≥ 0.40 against groups seen in the last 7 days, with a 7-day freshness window to prevent merging unrelated same-topic stories
+2. Fuzzy Jaccard similarity ≥ 0.20 against groups seen in the last 7 days (lowered from 0.40); entity match boost: shared portfolio/candidates ticker or company-name token AND Jaccard ≥ 0.15 → merge
+3. URL domain clustering: different URL domain + shared entity token + published within 24h → merge regardless of Jaccard score
 
 ## Dependencies
 
