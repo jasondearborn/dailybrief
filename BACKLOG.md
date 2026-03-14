@@ -19,21 +19,6 @@ Make a discrete git commit after completing each backlog item. Commit message fo
 
 ## Open
 
-### #31 — General purpose ingest layer
-Extend the fetcher layer beyond RSS to support JS-rendered pages and direct scraping for sources where RSS is unavailable or incomplete. Free content only — no paywall bypass.
-
-Implementation:
-- Add `fetchers/web_scraper.py` using Playwright (async Python, headless Chromium)
-- Writes to `raw_articles` using same schema as `rss_fetcher.py` so downstream pipeline is unaware of fetch method
-- Call from `main.py` alongside `rss_fetcher.py`
-- Initial targets: Morgan Stanley Insights (`morganstanley.com/insights`)
-- Record fetch method as `format=scrape` in `source_health` table
-- Add Playwright to `requirements.txt`
-
-Note: Schwab is WAF-blocked — deprioritized until Morgan Stanley scraper is validated. Paywalled sources (FT, Bloomberg BW, The Information, Puck) are out of scope.
-
----
-
 ### #32 — Sample brief in repo
 Copy the most recent morning brief from `output/briefs/` into `output/examples/sample_brief.html` and commit it. Do not generate a new brief. Do not automate this — one-time manual copy. Add a "What it produces" section near the top of `README.md` with prose description of the email format (tiers, graphical header, theme callout) and a link to `output/examples/sample_brief.html`.
 
@@ -41,6 +26,7 @@ Copy the most recent morning brief from `output/briefs/` into `output/examples/s
 
 ## Done
 
+- [x] **#31 — General purpose ingest layer** — `fetchers/web_scraper.py` added using Playwright headless Chromium; writes to `raw_articles` and upserts `source_health` with `format=scrape`; initial target Morgan Stanley Insights; called from `main.py`; Playwright added to `requirements.txt`
 - [x] **#30 — Source health tracking** — `source_health` table added to DB schema; `rss_fetcher.py` upserts row after each feed fetch; failed sources appended to `BACKLOG.md` as `[source-health]` open items
 - [x] **#29 — Prompt caching** — `cache_control: ephemeral` added to system prompt block in `synthesize.py`; cache read/creation tokens logged per run to `brief_history` table
 - [x] **#1 — Brief type in subject line** — `--brief-type` passed from cron → main.py → send_brief.py → email subject
