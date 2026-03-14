@@ -19,17 +19,6 @@ Make a discrete git commit after completing each backlog item. Commit message fo
 
 ## Open
 
-### #30 — Source health tracking
-Add source health tracking as a side effect of the existing fetch pipeline. Do not create a separate audit script.
-
-Implementation:
-- Add `source_health` table to DB schema (create if not exists): `source_name TEXT`, `url TEXT`, `format TEXT` (rss/scrape/api/manual), `last_fetch_at DATETIME`, `last_success_at DATETIME`, `last_status TEXT` (ok/empty/error/paywall), `article_count INTEGER`, `notes TEXT`
-- In `fetchers/rss_fetcher.py`, upsert a row to `source_health` after each feed fetch attempt — status, article count, timestamp. Reuse fetch result already in hand; no additional HTTP calls.
-- After each run, append any source with status not `ok` to `BACKLOG.md` as an open item tagged `[source-health]` — skip if an open item for that source already exists.
-- Update `README.md` to reflect new table and behavior.
-
----
-
 ### #31 — General purpose ingest layer
 Extend the fetcher layer beyond RSS to support JS-rendered pages and direct scraping for sources where RSS is unavailable or incomplete. Free content only — no paywall bypass.
 
@@ -52,6 +41,7 @@ Copy the most recent morning brief from `output/briefs/` into `output/examples/s
 
 ## Done
 
+- [x] **#30 — Source health tracking** — `source_health` table added to DB schema; `rss_fetcher.py` upserts row after each feed fetch; failed sources appended to `BACKLOG.md` as `[source-health]` open items
 - [x] **#29 — Prompt caching** — `cache_control: ephemeral` added to system prompt block in `synthesize.py`; cache read/creation tokens logged per run to `brief_history` table
 - [x] **#1 — Brief type in subject line** — `--brief-type` passed from cron → main.py → send_brief.py → email subject
 - [x] **#2 — Cron timezone** — `CRON_TZ=America/Los_Angeles`; morning 06:00, midday 11:30 PDT
