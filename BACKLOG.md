@@ -19,13 +19,9 @@ Make a discrete git commit after completing each backlog item. Commit message fo
 
 ## Open
 
-### #32 — Sample brief in repo
-Copy the most recent morning brief from `output/briefs/` into `output/examples/sample_brief.html` and commit it. Do not generate a new brief. Do not automate this — one-time manual copy. Add a "What it produces" section near the top of `README.md` with prose description of the email format (tiers, graphical header, theme callout) and a link to `output/examples/sample_brief.html`.
-
----
-
 ## Done
 
+- [x] **#32 — Sample brief in repo** — `2026-03-13_1303_morning.md` rendered to `output/examples/sample_brief.html`; "What it produces" section added to `README.md` with tier descriptions and link
 - [x] **#31 — General purpose ingest layer** — `fetchers/web_scraper.py` added using Playwright headless Chromium; writes to `raw_articles` and upserts `source_health` with `format=scrape`; initial target Morgan Stanley Insights; called from `main.py`; Playwright added to `requirements.txt`
 - [x] **#30 — Source health tracking** — `source_health` table added to DB schema; `rss_fetcher.py` upserts row after each feed fetch; failed sources appended to `BACKLOG.md` as `[source-health]` open items
 - [x] **#29 — Prompt caching** — `cache_control: ephemeral` added to system prompt block in `synthesize.py`; cache read/creation tokens logged per run to `brief_history` table

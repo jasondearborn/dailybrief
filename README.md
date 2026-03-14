@@ -2,6 +2,17 @@
 
 Personal RSS-to-email news briefing pipeline. Fetches 47 curated feeds plus SEC EDGAR filings, macro data for portfolio tickers, and JS-rendered sources via Playwright; normalizes and deduplicates articles; synthesizes them via Claude with prompt caching; and delivers a formatted HTML email brief. Includes portfolio-aware synthesis for midday briefs and source health tracking.
 
+## What it produces
+
+Each run delivers an HTML email with a dark-themed graphical header and a tiered narrative brief. The header shows color-coded tile counts for each tier (Act Now / Monitor / Background / Flags) and a one-sentence theme callout that names the dominant story of the session. The body is divided into four tiers:
+
+- **Tier 1 — Act or Prepare Now**: High-confidence, time-sensitive stories with an explicit action item.
+- **Tier 2 — Monitor**: Important but not immediately actionable; includes a "Why it matters" paragraph.
+- **Tier 3 — Background**: Context and slower-moving signals, capped at 5 items.
+- **Flags**: Pre-publication research, regulatory filings, geopolitical cautions, and low-confidence signals worth logging.
+
+See [`output/examples/sample_brief.html`](output/examples/sample_brief.html) for a rendered example.
+
 ## Pipeline
 
 ```
