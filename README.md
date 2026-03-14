@@ -11,7 +11,7 @@ Each run delivers an HTML email with a dark-themed graphical header and a tiered
 - **Tier 3 — Background**: Context and slower-moving signals, capped at 5 items.
 - **Flags**: Pre-publication research, regulatory filings, geopolitical cautions, and low-confidence signals worth logging.
 
-See [`output/examples/sample_brief.html`](output/examples/sample_brief.html) for a rendered example.
+See [sample brief](https://jasondearborn.github.io/dailybrief/output/examples/sample_brief.html) for a rendered example.
 
 ## Pipeline
 
