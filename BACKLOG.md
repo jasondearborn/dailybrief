@@ -3,7 +3,7 @@
 ## Standing Instructions
 Append to every Claude Code session prompt: "When all open items are complete, update README.md to reflect current codebase state, commit, and exit."
 
-When completing a backlog item, move it from `## Open` to `## Done` and prefix with `- [x]`. Do not delete it.
+When completing a backlog item, move it from `## Open` to `## Done` and prefix with `- [x]`. Do not delete it. Insert at the top of the Done list, not the bottom — Done is reverse chronological.
 
 Match the existing `- [x]` entry format exactly — one line, past tense, concise description of what was done and which files were affected.
 
